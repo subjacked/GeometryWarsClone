@@ -252,6 +252,38 @@ function randInt(min, max) {
   return Math.floor(rand(min, max + 1));
 }
 
+function hexToRgb(hex) {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return { r: 255, g: 255, b: 255 };
+  return {
+    r: parseInt(clean.slice(0, 2), 16),
+    g: parseInt(clean.slice(2, 4), 16),
+    b: parseInt(clean.slice(4, 6), 16),
+  };
+}
+
+function shadeHex(hex, factor, alpha = 1) {
+  const rgb = hexToRgb(hex);
+  const r = clamp(Math.round(rgb.r * factor), 0, 255);
+  const g = clamp(Math.round(rgb.g * factor), 0, 255);
+  const b = clamp(Math.round(rgb.b * factor), 0, 255);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function depthScale(y) {
+  const t = clamp(y / canvas.height, 0, 1);
+  return lerp(0.9, 1.12, t);
+}
+
+function depthLift(y) {
+  const t = clamp(y / canvas.height, 0, 1);
+  return lerp(-10, 8, t);
+}
+
+function projectY(y) {
+  return y + depthLift(y);
+}
+
 function weightedPick(entries) {
   let total = 0;
   for (const [, weight] of entries) total += weight;
@@ -429,20 +461,10 @@ function spawnEnemy(forceType = null, x = null, y = null) {
   const side = randInt(0, 3);
   let px = x;
   let py = y;
-  if (px === null || py === null) {
-    if (side === 0) {
-      px = -24;
-      py = rand(20, canvas.height - 20);
-    } else if (side === 1) {
-      px = canvas.width + 24;
-      py = rand(20, canvas.height - 20);
-    } else if (side === 2) {
-      px = rand(20, canvas.width - 20);
-      py = -24;
-    } else {
-      px = rand(20, canvas.width - 20);
-      py = canvas.height + 24;
-    }
+  const autoSpawnAtEdge = px === null || py === null;
+  if (autoSpawnAtEdge) {
+    px = canvas.width * 0.5;
+    py = canvas.height * 0.5;
   }
 
   const enemy = {
@@ -495,6 +517,27 @@ function spawnEnemy(forceType = null, x = null, y = null) {
     enemy.radius = 8;
     enemy.speed = rand(150, 210) + state.levelIndex * 7;
     enemy.color = "#b5c2ff";
+  }
+
+  if (autoSpawnAtEdge) {
+    const margin = enemy.radius + 12;
+    if (side === 0) {
+      enemy.x = margin;
+      enemy.y = rand(margin, canvas.height - margin);
+      enemy.vx = rand(40, 100);
+    } else if (side === 1) {
+      enemy.x = canvas.width - margin;
+      enemy.y = rand(margin, canvas.height - margin);
+      enemy.vx = -rand(40, 100);
+    } else if (side === 2) {
+      enemy.x = rand(margin, canvas.width - margin);
+      enemy.y = margin;
+      enemy.vy = rand(40, 100);
+    } else {
+      enemy.x = rand(margin, canvas.width - margin);
+      enemy.y = canvas.height - margin;
+      enemy.vy = -rand(40, 100);
+    }
   }
 
   state.enemies.push(enemy);
@@ -643,6 +686,24 @@ function enemyBehavior(enemy, dt) {
   enemy.vy *= enemy.type === "tank" ? 0.94 : 0.96;
   enemy.x += enemy.vx * dt;
   enemy.y += enemy.vy * dt;
+
+  const margin = enemy.radius + 7;
+  const wallBounce = enemy.type === "tank" ? 0.34 : 0.42;
+  if (enemy.x < margin) {
+    enemy.x = margin;
+    enemy.vx = Math.abs(enemy.vx) * wallBounce;
+  } else if (enemy.x > canvas.width - margin) {
+    enemy.x = canvas.width - margin;
+    enemy.vx = -Math.abs(enemy.vx) * wallBounce;
+  }
+  if (enemy.y < margin) {
+    enemy.y = margin;
+    enemy.vy = Math.abs(enemy.vy) * wallBounce;
+  } else if (enemy.y > canvas.height - margin) {
+    enemy.y = canvas.height - margin;
+    enemy.vy = -Math.abs(enemy.vy) * wallBounce;
+  }
+
   trackTrail(enemy, enemy.type === "tank" ? 6 : 10);
 }
 
@@ -879,39 +940,71 @@ function seedStars() {
 
 function drawBackground() {
   const levelHue = 188 + state.levelIndex * 8;
-  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  g.addColorStop(0, `hsl(${levelHue}, 60%, 8%)`);
-  g.addColorStop(1, `hsl(${Math.max(0, levelHue - 35)}, 52%, 4%)`);
-  ctx.fillStyle = g;
+  const horizonY = canvas.height * 0.24;
+
+  const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
+  sky.addColorStop(0, `hsl(${levelHue}, 62%, 12%)`);
+  sky.addColorStop(1, `hsl(${Math.max(0, levelHue - 18)}, 58%, 7%)`);
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, canvas.width, horizonY);
+
+  const floor = ctx.createLinearGradient(0, horizonY, 0, canvas.height);
+  floor.addColorStop(0, `hsl(${Math.max(0, levelHue - 22)}, 70%, 8%)`);
+  floor.addColorStop(1, "hsl(176, 90%, 3%)");
+  ctx.fillStyle = floor;
+  ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
+
+  const horizonGlow = ctx.createRadialGradient(
+    canvas.width * 0.5,
+    horizonY - 8,
+    12,
+    canvas.width * 0.5,
+    horizonY,
+    canvas.width * 0.66
+  );
+  horizonGlow.addColorStop(0, "rgba(116, 242, 255, 0.22)");
+  horizonGlow.addColorStop(1, "rgba(116, 242, 255, 0)");
+  ctx.fillStyle = horizonGlow;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const star of state.stars) {
     star.y += star.speed * FIXED_DT;
-    if (star.y > canvas.height + 10) {
-      star.y = -10;
+    if (star.y > canvas.height + 12) {
+      star.y = -12;
       star.x = rand(0, canvas.width);
     }
-    const alpha = 0.3 + Math.sin(state.time * 1.2 + star.twinkle) * 0.22;
-    ctx.fillStyle = `rgba(160, 243, 255, ${Math.max(0.1, alpha)})`;
+    const alpha = 0.28 + Math.sin(state.time * 1.2 + star.twinkle) * 0.2;
+    const depthAlpha = star.y < horizonY ? 1 : 0.35;
+    ctx.fillStyle = `rgba(160, 243, 255, ${Math.max(0.08, alpha) * depthAlpha})`;
     ctx.fillRect(star.x, star.y, star.size, star.size);
   }
 
-  ctx.strokeStyle = "rgba(84, 225, 255, 0.17)";
+  const drift = state.time * 0.42;
+  const vanishingX = canvas.width * 0.5 + Math.sin(state.time * 0.2) * 18;
+
+  ctx.strokeStyle = "rgba(80, 230, 255, 0.22)";
   ctx.lineWidth = 1;
-  const spacing = 42;
-  const drift = (state.time * 28) % spacing;
-  for (let x = -spacing; x < canvas.width + spacing; x += spacing) {
+  for (let i = -16; i <= 16; i++) {
+    const xTop = vanishingX + i * 48 + Math.sin(drift + i * 0.3) * 9;
+    const xBottom = vanishingX + i * 142;
     ctx.beginPath();
-    ctx.moveTo(x + drift, 0);
-    ctx.lineTo(x + drift - canvas.height * 0.2, canvas.height);
+    ctx.moveTo(xTop, horizonY);
+    ctx.lineTo(xBottom, canvas.height);
     ctx.stroke();
   }
-  for (let y = -spacing; y < canvas.height + spacing; y += spacing) {
+  for (let i = 1; i <= 20; i++) {
+    const t = i / 20;
+    const y = horizonY + t * t * (canvas.height - horizonY);
+    const alpha = 0.26 * (1 - t) + 0.05;
+    ctx.strokeStyle = `rgba(80, 230, 255, ${alpha})`;
     ctx.beginPath();
-    ctx.moveTo(0, y + drift * 0.4);
-    ctx.lineTo(canvas.width, y + drift * 0.4);
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+  ctx.fillRect(0, canvas.height - 36, canvas.width, 36);
 }
 
 function drawTrail(entity, color) {
@@ -919,35 +1012,125 @@ function drawTrail(entity, color) {
   ctx.beginPath();
   for (let i = 0; i < entity.trail.length; i++) {
     const point = entity.trail[i];
-    if (i === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
+    if (i === 0) ctx.moveTo(point.x, projectY(point.y));
+    else ctx.lineTo(point.x, projectY(point.y));
   }
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.8 * depthScale(entity.y);
   ctx.stroke();
+}
+
+function drawGroundShadow(x, y, radius, alpha = 0.22) {
+  const py = projectY(y) + radius * 0.7;
+  ctx.save();
+  ctx.translate(x, py);
+  ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, radius * 0.95, radius * 0.42, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function traceEnemyShape(type, radius) {
+  if (type === "seeker") {
+    ctx.beginPath();
+    ctx.moveTo(0, -radius);
+    ctx.lineTo(radius, 0);
+    ctx.lineTo(0, radius);
+    ctx.lineTo(-radius, 0);
+    ctx.closePath();
+    return;
+  }
+  if (type === "spinner") {
+    ctx.beginPath();
+    ctx.rect(-radius, -radius, radius * 2, radius * 2);
+    ctx.closePath();
+    return;
+  }
+  if (type === "tank") {
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    return;
+  }
+  if (type === "mine") {
+    ctx.beginPath();
+    const spikes = 14;
+    for (let i = 0; i < spikes; i++) {
+      const angle = (Math.PI * 2 * i) / spikes;
+      const r = i % 2 === 0 ? radius + 6 : radius * 0.54;
+      const x = Math.cos(angle) * r;
+      const y = Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    return;
+  }
+  if (type === "splitter") {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI * 2 * i) / 6;
+      const r = i % 2 === 0 ? radius : radius * 0.5;
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, -radius);
+  ctx.lineTo(radius, radius);
+  ctx.lineTo(-radius, radius);
+  ctx.closePath();
 }
 
 function drawPlayer() {
   const p = state.player;
-  drawTrail(p, "rgba(89, 247, 255, 0.24)");
+  drawTrail(p, "rgba(89, 247, 255, 0.2)");
 
   const aim = Math.atan2(input.mouseY - p.y, input.mouseX - p.x);
   const invulAlpha = p.invulnerable > 0 ? 0.45 + Math.sin(state.time * 24) * 0.25 : 1;
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(aim);
-  ctx.shadowBlur = 24;
-  ctx.shadowColor = "rgba(73, 240, 255, 0.9)";
-  ctx.fillStyle = `rgba(100, 245, 255, ${invulAlpha})`;
-  ctx.beginPath();
-  ctx.moveTo(20, 0);
-  ctx.lineTo(-12, 11);
-  ctx.lineTo(-8, 0);
-  ctx.lineTo(-12, -11);
-  ctx.closePath();
-  ctx.fill();
+  const scale = depthScale(p.y);
+  const py = projectY(p.y);
+  drawGroundShadow(p.x, p.y, p.radius * scale * 1.1, 0.25);
 
-  ctx.fillStyle = "rgba(236, 252, 255, 0.96)";
+  const drawHullPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(20, 0);
+    ctx.lineTo(-12, 11);
+    ctx.lineTo(-8, 0);
+    ctx.lineTo(-12, -11);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  ctx.translate(p.x, py);
+  ctx.rotate(aim);
+  ctx.scale(scale, scale);
+
+  ctx.save();
+  ctx.translate(-2.2, 4);
+  ctx.fillStyle = `rgba(31, 130, 146, ${invulAlpha})`;
+  drawHullPath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.shadowBlur = 26;
+  ctx.shadowColor = "rgba(73, 240, 255, 0.9)";
+  const hullGradient = ctx.createLinearGradient(-15, -14, 20, 16);
+  hullGradient.addColorStop(0, `rgba(178, 255, 255, ${invulAlpha})`);
+  hullGradient.addColorStop(1, `rgba(50, 212, 235, ${invulAlpha})`);
+  ctx.fillStyle = hullGradient;
+  drawHullPath();
+  ctx.fill();
+  ctx.strokeStyle = `rgba(220, 253, 255, ${invulAlpha})`;
+  ctx.lineWidth = 2;
+  drawHullPath();
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(236, 252, 255, 0.98)";
   ctx.beginPath();
   ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
   ctx.fill();
@@ -963,76 +1146,61 @@ function drawPlayer() {
 }
 
 function drawBullet(b) {
+  const scale = depthScale(b.y);
+  const py = projectY(b.y);
   ctx.shadowBlur = 16;
   ctx.shadowColor = b.glow;
   ctx.fillStyle = b.glow;
   ctx.beginPath();
-  ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+  ctx.arc(b.x, py, b.radius * scale, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawEnemy(enemy) {
-  drawTrail(enemy, `${enemy.color}33`);
-  ctx.save();
-  ctx.translate(enemy.x, enemy.y);
-  ctx.rotate(enemy.angle);
-  ctx.shadowBlur = enemy.type === "tank" ? 24 : 14;
-  ctx.shadowColor = enemy.color;
-  ctx.strokeStyle = enemy.color;
-  ctx.lineWidth = enemy.type === "tank" ? 3 : 2;
+  drawTrail(enemy, shadeHex(enemy.color, 0.95, 0.22));
+  const scale = depthScale(enemy.y);
+  const py = projectY(enemy.y);
+  drawGroundShadow(enemy.x, enemy.y, enemy.radius * scale, enemy.type === "tank" ? 0.3 : 0.22);
 
-  if (enemy.type === "seeker") {
+  ctx.save();
+  ctx.translate(enemy.x, py);
+  ctx.rotate(enemy.angle);
+  ctx.scale(scale, scale);
+
+  ctx.save();
+  ctx.translate(-2, enemy.type === "tank" ? 7 : 5);
+  ctx.fillStyle = shadeHex(enemy.color, 0.38, 0.9);
+  ctx.strokeStyle = shadeHex(enemy.color, 0.6, 0.95);
+  ctx.lineWidth = enemy.type === "tank" ? 3 : 2;
+  traceEnemyShape(enemy.type, enemy.radius);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.shadowBlur = enemy.type === "tank" ? 24 : 15;
+  ctx.shadowColor = shadeHex(enemy.color, 1.18, 0.95);
+  ctx.fillStyle = shadeHex(enemy.color, 0.95, 0.88);
+  ctx.strokeStyle = shadeHex(enemy.color, 1.4, 1);
+  ctx.lineWidth = enemy.type === "tank" ? 3 : 2;
+  traceEnemyShape(enemy.type, enemy.radius);
+  ctx.fill();
+  ctx.stroke();
+
+  if (enemy.type === "tank") {
+    ctx.strokeStyle = shadeHex(enemy.color, 1.65, 0.95);
     ctx.beginPath();
-    ctx.moveTo(0, -enemy.radius);
-    ctx.lineTo(enemy.radius, 0);
-    ctx.lineTo(0, enemy.radius);
-    ctx.lineTo(-enemy.radius, 0);
-    ctx.closePath();
+    ctx.arc(0, 0, enemy.radius * 0.56, 0, Math.PI * 2);
     ctx.stroke();
   } else if (enemy.type === "spinner") {
-    ctx.beginPath();
-    ctx.rect(-enemy.radius, -enemy.radius, enemy.radius * 2, enemy.radius * 2);
-    ctx.stroke();
+    ctx.strokeStyle = shadeHex(enemy.color, 1.7, 0.95);
     ctx.beginPath();
     ctx.moveTo(-enemy.radius, 0);
     ctx.lineTo(enemy.radius, 0);
     ctx.stroke();
-  } else if (enemy.type === "tank") {
-    ctx.beginPath();
-    ctx.arc(0, 0, enemy.radius, 0, Math.PI * 2);
-    ctx.stroke();
+  } else if (enemy.type === "mine") {
+    ctx.strokeStyle = shadeHex(enemy.color, 1.45, 0.95);
     ctx.beginPath();
     ctx.arc(0, 0, enemy.radius * 0.56, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (enemy.type === "mine") {
-    for (let i = 0; i < 7; i++) {
-      const a = (Math.PI * 2 * i) / 7;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
-      ctx.lineTo(Math.cos(a) * (enemy.radius + 6), Math.sin(a) * (enemy.radius + 6));
-      ctx.stroke();
-    }
-    ctx.beginPath();
-    ctx.arc(0, 0, enemy.radius * 0.64, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (enemy.type === "splitter") {
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI * 2 * i) / 6;
-      const r = i % 2 === 0 ? enemy.radius : enemy.radius * 0.48;
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(0, -enemy.radius);
-    ctx.lineTo(enemy.radius, enemy.radius);
-    ctx.lineTo(-enemy.radius, enemy.radius);
-    ctx.closePath();
     ctx.stroke();
   }
 
@@ -1041,30 +1209,34 @@ function drawEnemy(enemy) {
 
 function drawPowerup(item) {
   const color = item.type === "rapid" ? "#fff28c" : item.type === "shield" ? "#89ffd2" : "#c48dff";
-  const r = item.radius + Math.sin(item.pulse) * 2;
+  const scale = depthScale(item.y);
+  const py = projectY(item.y);
+  const r = (item.radius + Math.sin(item.pulse) * 2) * scale;
+  drawGroundShadow(item.x, item.y, r * 0.95, 0.18);
   ctx.shadowBlur = 20;
   ctx.shadowColor = color;
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(item.x, item.y, r, 0, Math.PI * 2);
+  ctx.arc(item.x, py, r, 0, Math.PI * 2);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(item.x - r * 0.6, item.y);
-  ctx.lineTo(item.x + r * 0.6, item.y);
+  ctx.moveTo(item.x - r * 0.6, py);
+  ctx.lineTo(item.x + r * 0.6, py);
   ctx.stroke();
 }
 
 function drawParticles() {
   for (const p of state.particles) {
     const alpha = clamp(p.life / p.maxLife, 0, 1);
+    const scale = depthScale(p.y);
     ctx.shadowBlur = p.glow;
     ctx.shadowColor = p.color;
     ctx.fillStyle = `${p.color}${Math.round(alpha * 255)
       .toString(16)
       .padStart(2, "0")}`;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+    ctx.arc(p.x, projectY(p.y), p.size * alpha * scale, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -1094,9 +1266,12 @@ function render() {
   ctx.translate(state.cameraOffsetX, state.cameraOffsetY);
   ctx.globalCompositeOperation = "lighter";
 
+  const enemiesByDepth = [...state.enemies].sort((a, b) => a.y - b.y);
+  const powerupsByDepth = [...state.powerups].sort((a, b) => a.y - b.y);
+
+  for (const enemy of enemiesByDepth) drawEnemy(enemy);
+  for (const item of powerupsByDepth) drawPowerup(item);
   for (const b of state.bullets) drawBullet(b);
-  for (const enemy of state.enemies) drawEnemy(enemy);
-  for (const item of state.powerups) drawPowerup(item);
   drawParticles();
 
   ctx.globalCompositeOperation = "source-over";

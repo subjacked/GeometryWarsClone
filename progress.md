@@ -24,3 +24,6 @@ TODO / Next-agent suggestions:
 - Extend Playwright action coverage for pause/fullscreen/restart/menu flows with a richer key map in the client script.
 - Consider adding music layer and optional in-game settings panel (volume/sensitivity/effects intensity).
 - Added `.gitignore` coverage for build/test artifacts (`dist`, `output`, `.DS_Store`).
+- Addressed enemy edge-sticking by changing edge spawn to fully in-arena and adding wall confinement bounce in enemy movement.
+- Implemented pseudo-3D visual upgrade in canvas renderer: perspective horizon floor grid, depth projection helpers, depth-scaled shadows, shaded/extruded-style player and enemy shapes, and depth-aware draw order.
+- Verified with `npm run build` and Playwright client run (`output/web-game-3d/shot-0.png`, `state-0.json`) with no error artifact generated.
