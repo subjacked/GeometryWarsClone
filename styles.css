@@ -1,0 +1,192 @@
+@import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@400;500;700&display=swap");
+
+:root {
+  --bg-ink: #04131e;
+  --bg-shadow: #01060a;
+  --panel: rgba(5, 20, 31, 0.76);
+  --line: rgba(98, 201, 255, 0.45);
+  --glow: #27f7ff;
+  --hot: #ff4676;
+  --text: #def9ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Rajdhani", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 20% 10%, rgba(39, 247, 255, 0.18), transparent 52%),
+    radial-gradient(circle at 82% 14%, rgba(255, 70, 118, 0.2), transparent 45%),
+    linear-gradient(180deg, var(--bg-ink), var(--bg-shadow));
+}
+
+.chrome-wrap {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.hud-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(6, 24, 34, 0.88), rgba(6, 24, 34, 0.45));
+  backdrop-filter: blur(5px);
+}
+
+.brand {
+  font-family: "Audiowide", sans-serif;
+  letter-spacing: 0.08em;
+  color: #9af8ff;
+  text-shadow: 0 0 10px rgba(39, 247, 255, 0.64);
+}
+
+.hud-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-weight: 700;
+}
+
+.hud-group span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: rgba(5, 17, 27, 0.72);
+}
+
+.stage-wrap {
+  position: relative;
+  padding: 14px;
+  display: grid;
+  place-items: center;
+}
+
+#game-canvas {
+  width: min(96vw, 1400px);
+  height: min(calc(100vh - 154px), 78vw);
+  max-height: 84vh;
+  border: 1px solid rgba(114, 219, 255, 0.5);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px rgba(114, 219, 255, 0.25),
+    0 24px 45px rgba(0, 0, 0, 0.48),
+    inset 0 0 120px rgba(40, 248, 255, 0.08);
+  background: #04070b;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 22px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(2, 9, 16, 0.66), rgba(2, 9, 16, 0.84)),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(30, 255, 255, 0.05) 0,
+      rgba(30, 255, 255, 0.05) 2px,
+      transparent 2px,
+      transparent 6px
+    );
+  backdrop-filter: blur(2px);
+}
+
+.overlay.active {
+  display: flex;
+}
+
+.overlay h1,
+.overlay h2 {
+  margin: 0;
+  font-family: "Audiowide", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.tagline {
+  max-width: 680px;
+  font-size: 1.25rem;
+}
+
+.action-btn {
+  border: 1px solid rgba(91, 226, 255, 0.8);
+  color: #e8feff;
+  background: linear-gradient(90deg, rgba(26, 91, 126, 0.78), rgba(194, 39, 88, 0.68));
+  border-radius: 999px;
+  padding: 10px 30px;
+  font: 700 1.02rem "Rajdhani", sans-serif;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 0 18px rgba(53, 235, 255, 0.6);
+}
+
+.controls {
+  margin: 0;
+  opacity: 0.95;
+}
+
+#highscore-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: min(480px, 90%);
+  display: grid;
+  gap: 6px;
+}
+
+#highscore-list li {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid rgba(102, 225, 255, 0.28);
+  border-radius: 12px;
+  padding: 6px 10px;
+  background: rgba(5, 19, 29, 0.72);
+}
+
+.footer-note {
+  text-align: center;
+  padding: 8px 12px 14px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+@media (max-width: 900px) {
+  .hud-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .brand {
+    font-size: 0.92rem;
+  }
+
+  #game-canvas {
+    height: min(calc(100vh - 220px), 100vw);
+  }
+
+  .tagline {
+    font-size: 1rem;
+  }
+}
