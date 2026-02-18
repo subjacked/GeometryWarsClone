@@ -13,37 +13,71 @@
         <div class="hud-group">
           <span id="hud-level">Level 1</span>
           <span id="hud-score">Score 0</span>
-          <span id="hud-lives">Lives 3</span>
           <span id="hud-streak">Streak x1</span>
         </div>
       </header>
       <main class="stage-wrap">
-        <canvas id="game-canvas" width="1280" height="720" aria-label="Game canvas"></canvas>
-        <section id="menu-screen" class="overlay active">
-          <h1>NEON GEOMETRY RIFT</h1>
-          <p class="tagline">Fast twin-stick survival through escalating geometric warzones.</p>
-          <button id="start-btn" class="action-btn">Start Run</button>
-          <p class="controls">
-            Move: WASD / Arrows • Aim: Mouse • Fire: Hold Left Mouse or Space<br />
-            Dash: Shift • Pause: P • Fullscreen: F • Audio Mute: M
-          </p>
-          <h2>Highscores</h2>
-          <ol id="highscore-list"></ol>
-        </section>
-        <section id="pause-screen" class="overlay">
-          <h2>Paused</h2>
-          <p>Press P to resume.</p>
-        </section>
-        <section id="game-over-screen" class="overlay">
-          <h2>Run Failed</h2>
-          <p id="game-over-summary"></p>
-          <button id="restart-btn" class="action-btn">Retry</button>
-        </section>
+        <div class="play-frame">
+          <canvas id="game-canvas" width="1280" height="720" aria-label="Game canvas"></canvas>
+          <section id="frame-hud" class="frame-hud">
+            <div class="meter meter-health">
+              <div class="meter-track"><div id="hud-energy-fill" class="meter-fill energy-fill"></div></div>
+            </div>
+            <div class="meter meter-shield">
+              <div class="meter-track"><div id="hud-shield-fill" class="meter-fill shield-fill"></div></div>
+            </div>
+          </section>
+          <section id="boss-health-wrap" class="boss-health-wrap">
+            <div id="boss-health-name" class="boss-health-name">CORE TITAN • 100%</div>
+            <div class="boss-health-track">
+              <div id="boss-health-fill" class="boss-health-fill"></div>
+            </div>
+          </section>
+          <div id="hud-level-info" class="hud-corner hud-level-corner">Level 1 • Kills 0/0</div>
+          <div id="hud-weapon" class="hud-corner hud-weapon-corner">Weapon: Standard Blaster</div>
+          <div id="hud-powerup-info" class="hud-powerup-info">
+            Rapid: faster fire • Shield: contact immunity • Scatter: multi-shot • Cannon (E): massive blast • Heart: restore health • Nova: wipe
+          </div>
+          <section id="menu-screen" class="overlay active">
+            <h1>NEON GEOMETRY RIFT</h1>
+            <p class="tagline">Fast twin-stick survival through escalating geometric warzones.</p>
+            <button id="start-btn" class="action-btn">Start Run</button>
+            <p class="controls">
+              Move: WASD / Arrows • Aim: Mouse • Fire: Hold Left Mouse or Space<br />
+              Dash: Shift • Cannon Blast: E • Pause: P • Fullscreen: F • Audio Mute: M
+            </p>
+            <h2>Overall Highscores</h2>
+            <ol id="overall-highscore-list"></ol>
+            <h2>Highscores by Level</h2>
+            <label class="score-level-select-wrap">
+              <span>Level</span>
+              <select id="highscore-level-select"></select>
+            </label>
+            <ol id="highscore-list"></ol>
+          </section>
+          <section id="pause-screen" class="overlay">
+            <h2>Paused</h2>
+            <p>Press P to resume.</p>
+          </section>
+          <section id="game-over-screen" class="overlay">
+            <h2>Run Failed</h2>
+            <p id="game-over-summary"></p>
+            <h3 id="game-over-highscore-title">Top Pilots</h3>
+            <ol id="game-over-highscore-list" class="highscore-list"></ol>
+            <form id="score-form" class="score-form" autocomplete="off">
+              <label for="player-name-input">Pilot Name</label>
+              <input id="player-name-input" name="playerName" maxlength="16" placeholder="NEON-ACE" />
+              <button id="save-score-btn" type="submit" class="action-btn">Save Score</button>
+              <p id="score-save-status" class="score-status"></p>
+            </form>
+            <button id="restart-btn" class="action-btn">Retry</button>
+          </section>
+        </div>
       </main>
       <footer class="footer-note">
         Inspired by arcade twin-stick shooters. Original implementation and assets generated procedurally.
       </footer>
     </div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

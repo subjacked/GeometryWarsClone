@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Boot Sequence",
+    "targetKills": 26,
+    "spawnInterval": 1.1,
+    "maxEnemies": 12,
+    "mix": [["seeker", 6], ["spinner", 2], ["mine", 1]],
+    "playerSpeedBonus": 0,
+    "bossLevel": false
+  },
+  {
+    "name": "Pulse District",
+    "targetKills": 40,
+    "spawnInterval": 0.95,
+    "maxEnemies": 16,
+    "mix": [["seeker", 4], ["spinner", 4], ["mine", 2], ["splitter", 2]],
+    "playerSpeedBonus": 12,
+    "bossLevel": false
+  },
+  {
+    "name": "Fractal Pressure",
+    "targetKills": 56,
+    "spawnInterval": 0.78,
+    "maxEnemies": 20,
+    "mix": [["seeker", 3], ["spinner", 5], ["tank", 2], ["mine", 3], ["splitter", 3]],
+    "playerSpeedBonus": 16,
+    "bossLevel": false
+  },
+  {
+    "name": "Event Horizon",
+    "targetKills": 74,
+    "spawnInterval": 0.64,
+    "maxEnemies": 24,
+    "mix": [["seeker", 2], ["spinner", 5], ["tank", 4], ["mine", 3], ["splitter", 5]],
+    "playerSpeedBonus": 22,
+    "bossLevel": false
+  },
+  {
+    "name": "Rift Core",
+    "targetKills": 96,
+    "spawnInterval": 0.53,
+    "maxEnemies": 30,
+    "mix": [["seeker", 2], ["spinner", 4], ["tank", 5], ["mine", 4], ["splitter", 6]],
+    "playerSpeedBonus": 30,
+    "bossLevel": true
+  }
+]

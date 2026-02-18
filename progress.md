@@ -27,3 +27,74 @@ TODO / Next-agent suggestions:
 - Addressed enemy edge-sticking by changing edge spawn to fully in-arena and adding wall confinement bounce in enemy movement.
 - Implemented pseudo-3D visual upgrade in canvas renderer: perspective horizon floor grid, depth projection helpers, depth-scaled shadows, shaded/extruded-style player and enemy shapes, and depth-aware draw order.
 - Verified with `npm run build` and Playwright client run (`output/web-game-3d/shot-0.png`, `state-0.json`) with no error artifact generated.
+- Switched app entry to TypeScript (`index.html` now loads `src/main.ts`) and added `tsconfig.json` + `npm run typecheck` script.
+- Introduced modular game data/services:
+  - `src/config/levels.json` for level definitions.
+  - `src/game/levels.ts` for runtime level scaling + boss-level detection.
+  - `src/game/highscores.ts` for score persistence and level-specific leaderboard queries.
+  - `src/game/types.ts` for shared game types.
+- Made highscores level-dependent with a level selector in the menu and level-specific board in game-over.
+- Added boss enemy cadence: every 5th level is flagged as a boss level and spawns a boss enemy with elevated HP/size/score value.
+- Kept Three.js background integration and composite rendering in place.
+- Validation:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Playwright run passed with no error artifact (`output/web-game-ts-modular-play/`).
+- Implemented survivability split: health is permanent damage until healed; shield auto-regens only after safe delay.
+- Added heart powerup type that restores health.
+- Added shield recharge audio cues (`shieldRecharge`/`shieldRestored`) and damage routing shield-first then health spillover.
+- Refactored in-frame HUD layout:
+  - Top-spanning health+shield bars only.
+  - Level/kill info moved to bottom-left corner.
+  - Weapon/status moved to bottom-right corner.
+  - Powerup help/message moved to centered lower overlay.
+- Visual HUD pass: bars are now significantly thicker and label rows are hidden for a cleaner modern gamer style.
+- Removed conflicting top-left canvas text HUD block so DOM HUD placement is authoritative.
+- Validation pass:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Playwright smoke run executed with latest artifacts in `output/web-game-hud-thick/`.
+- Enhanced invincibility shield VFX in `drawPlayer()`:
+  - Replaced single ring with multi-layer wavy energy shells.
+  - Added inner glow bubble and rotating segmented arcs for stronger readability.
+  - Effect activates while `shieldTimer > 0` (invincibility powerup state).
+- Validation:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Playwright smoke run artifacts: `output/web-game-shield-wave/`.
+- Removed lives system from game loop and HUD.
+- Player now dies immediately when health reaches 0 (no life stock / respawn).
+- Removed lives from `render_game_to_text` payload and top HUD.
+- Validation: `npm run typecheck` and `npm run build` both pass.
+- Rebuilt `src/game/background3d.ts` for crisper and slower visuals:
+  - Higher effective render sharpness (`pixelRatio` up to 2.2), toned-down fog blur, ACES tone mapping.
+  - Slower capsule/background motion (reduced rotation, pulse, and oscillation rates).
+- Added level-dependent background themes and variants:
+  - Palette/hue shifts by level.
+  - Variant pool by level index: planet backdrop, neon meteor orbits, neon ring outlines, and combined mixes.
+  - Variant visibility controlled automatically per level.
+- Kept ripple/explosion reaction integrated, with slightly calmer expansion pace.
+- Validation:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Playwright smoke artifacts: `output/web-game-bg-variants/`.
+- Added warp-jump level transition flow in `src/main.ts`.
+- New transition state: `warp-jump` between `level-complete` and `playing`.
+- Added cinematic warp visuals in-canvas:
+  - radial tunnel glow
+  - star-streak lines
+  - expanding rings and terminal flash
+- Updated pause/visibility handling so warp transition can pause/resume safely.
+- Added warp timer to `render_game_to_text` (`level.warp_timer`).
+- Validation:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Smoke run artifacts: `output/web-game-warp-smoke/`.
+- Dead-code cleanup pass:
+  - Removed obsolete unused entry file `src/main.js` (project uses `src/main.ts`).
+  - Removed hidden/unused meter label DOM nodes and related JS bindings/text updates (`hudEnergyText`, `hudShieldText`).
+  - Removed unused `hud-powerup-float` class token from HTML.
+  - Removed orphaned `.meter-label-row` CSS blocks.
+- Validation:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
