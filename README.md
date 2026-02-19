@@ -146,6 +146,14 @@ npm run preview
 
 ---
 
+
+## Maintenance Note
+
+- `src/main.ts` was updated in the previous commit only to fix a malformed block inside `drawBackground()` that caused TypeScript/esbuild parse failures (`Unexpected end of file` / missing `}`).
+- No gameplay mechanic was intentionally changed in that edit; the goal was to restore a valid build so the README work could ship with a runnable project.
+
+---
+
 ## Tech Stack
 
 - **TypeScript**
