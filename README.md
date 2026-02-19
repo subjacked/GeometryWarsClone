@@ -14,10 +14,6 @@ You pilot a neon strike craft through escalating geometric arenas, draft rogueli
 ### In-Game Combat
 ![Live gameplay with enemies, effects, and HUD](docs/screenshots/gameplay.svg)
 
----
-
-> Screenshots are now checked into the repository under `docs/screenshots/` so they remain visible after merge.
-
 ## Features
 
 - **Twin-stick arcade combat** (move + independent aim/fire)
