@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#031821"/>
+      <stop offset="1" stop-color="#201134"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg2)"/>
+  <g opacity="0.5" stroke="#36d0ff">
+    <line x1="250" y1="200" x2="1350" y2="200"/>
+    <line x1="200" y1="300" x2="1400" y2="300"/>
+    <line x1="160" y1="410" x2="1440" y2="410"/>
+    <line x1="140" y1="530" x2="1460" y2="530"/>
+    <line x1="120" y1="660" x2="1480" y2="660"/>
+  </g>
+  <circle cx="800" cy="470" r="20" fill="#73fffb"/>
+  <polygon points="980,380 1010,410 980,440 950,410" fill="#ff6ec8"/>
+  <rect x="620" y="360" width="36" height="36" fill="#ffca6e"/>
+  <circle cx="1130" cy="520" r="25" fill="#ffa66e"/>
+  <line x1="800" y1="470" x2="950" y2="410" stroke="#b4fbff" stroke-width="4"/>
+  <text x="800" y="110" text-anchor="middle" fill="#c7f6ff" font-size="54" font-family="Arial">Gameplay (Reference Shot)</text>
+  <text x="800" y="160" text-anchor="middle" fill="#95cae0" font-size="30" font-family="Arial">HUD, enemies, and combat readability example</text>
+  <text x="800" y="850" text-anchor="middle" fill="#7ca7b5" font-size="22" font-family="Arial">Committed documentation image</text>
+</svg>

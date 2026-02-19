@@ -9,12 +9,10 @@ You pilot a neon strike craft through escalating geometric arenas, draft rogueli
 ## Screenshots
 
 ### Main Menu / HUD
-![Main menu and highscore UI](browser:/tmp/codex_browser_invocations/cabc9bb947870e14/artifacts/artifacts/menu.png)
+![Main menu and highscore UI](docs/screenshots/menu.svg)
 
 ### In-Game Combat
-![Live gameplay with enemies, effects, and HUD](browser:/tmp/codex_browser_invocations/cabc9bb947870e14/artifacts/artifacts/gameplay.png)
-
----
+![Live gameplay with enemies, effects, and HUD](docs/screenshots/gameplay.svg)
 
 ## Features
 
