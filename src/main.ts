@@ -1950,16 +1950,31 @@ function drawBackground() {
       const x = arenaCx + nx * localSpan;
       const y = arenaCy + ny * arenaRadius;
       const bow = Math.sin(nx * Math.PI) * ny * 8;
-      const warped = sampleRippleWarp(x, y);
-      const px = warped.x + bow * 0.18;
-      const py = warped.y;
-      if (s === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
+    const farPressure = clamp((dist - 260) / 520, 0, 1);
+    const chaseForce = 3.1 + farPressure * 1.55;
+    const orbitForce = 1.6 + (1 - farPressure) * 0.75;
+    enemy.vx += (dx / dist) * enemy.speed * dt * chaseForce + orbitX * enemy.speed * dt * orbitForce;
+    enemy.vy += (dy / dist) * enemy.speed * dt * chaseForce + orbitY * enemy.speed * dt * orbitForce;
+    if (dist < 420) {
+      const rush = dist < 220 ? 1.45 : 1;
+      enemy.vx += (dx / dist) * (enemy.speed + 140) * dt * 2.5 * rush;
+      enemy.vy += (dy / dist) * (enemy.speed + 140) * dt * 2.5 * rush;
+      const drift = 24;
+      enemy.vx += (dx / dist) * (enemy.speed + 24) * dt * 0.95 + Math.cos(enemy.angle + state.time * 0.8) * drift * dt;
+      enemy.vy += (dy / dist) * (enemy.speed + 24) * dt * 0.95 + Math.sin(enemy.angle + state.time * 0.6) * drift * dt;
   }
 
-  for (const ripple of state.ripples) {
+    if (enemy.type === "spinner" && dist < 580) {
+
+  if (enemy.type === "spinner" || enemy.type === "mine") {
+    const speedSq = enemy.vx * enemy.vx + enemy.vy * enemy.vy;
+    const minSpeed = enemy.type === "spinner" ? 118 : 92;
+    if (speedSq < minSpeed * minSpeed) {
+      const boost = enemy.type === "spinner" ? 320 : 250;
+      enemy.vx += (dx / dist) * dt * boost;
+      enemy.vy += (dy / dist) * dt * boost;
+    }
+  }
     const alpha = 0.42 * (ripple.life / ripple.maxLife);
     ctx.strokeStyle = `rgba(144, 250, 255, ${alpha})`;
     ctx.lineWidth = 1.5;
