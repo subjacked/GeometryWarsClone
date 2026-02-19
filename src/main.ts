@@ -168,6 +168,10 @@ const ELITE_MODS = ["hasted", "armored", "volatile"] as const;
 
 const audio = new AudioEngine();
 const background3d = new Background3D(BASE_WIDTH, BASE_HEIGHT);
+const renderScratch = {
+  enemies: [],
+  powerups: [],
+};
 
 function createDefaultRelicStats() {
   return {
@@ -1417,8 +1421,8 @@ function destroyEnemy(index, hitByPlayer = true) {
       const other = state.enemies[i];
       const dx = other.x - enemy.x;
       const dy = other.y - enemy.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 120) {
+      const distSq = dx * dx + dy * dy;
+      if (distSq < 120 * 120) {
         other.hp -= 1;
       }
     }
@@ -1432,8 +1436,8 @@ function destroyEnemy(index, hitByPlayer = true) {
       const other = state.enemies[i];
       const dx = other.x - enemy.x;
       const dy = other.y - enemy.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > blast) continue;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > blast * blast) continue;
       other.hp -= 2.2;
       if (other.hp <= 0) destroyEnemy(i, true);
     }
@@ -1455,15 +1459,27 @@ function collideCircle(a, b) {
 
 function triggerArcChains(sourceEnemy, baseDamage, maxChains = 2) {
   if (maxChains <= 0) return;
-  const candidates = state.enemies
-    .filter((enemy) => enemy !== sourceEnemy)
-    .map((enemy) => ({
-      enemy,
-      dist: Math.hypot(enemy.x - sourceEnemy.x, enemy.y - sourceEnemy.y),
-    }))
-    .filter((entry) => entry.dist < 210)
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, maxChains);
+  const maxDistSq = 210 * 210;
+  const candidates = [];
+
+  for (let i = 0; i < state.enemies.length; i++) {
+    const enemy = state.enemies[i];
+    if (enemy === sourceEnemy) continue;
+    const dx = enemy.x - sourceEnemy.x;
+    const dy = enemy.y - sourceEnemy.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq >= maxDistSq) continue;
+
+    let insertAt = candidates.length;
+    for (let j = 0; j < candidates.length; j++) {
+      if (distSq < candidates[j].distSq) {
+        insertAt = j;
+        break;
+      }
+    }
+    candidates.splice(insertAt, 0, { enemy, distSq });
+    if (candidates.length > maxChains) candidates.length = maxChains;
+  }
 
   for (let i = 0; i < candidates.length; i++) {
     const target = candidates[i].enemy;
@@ -2516,6 +2532,12 @@ function drawPostFxPass() {
   }
 }
 
+function sortEntitiesByY(source, target) {
+  target.length = source.length;
+  for (let i = 0; i < source.length; i++) target[i] = source[i];
+  target.sort((a, b) => a.y - b.y);
+}
+
 function render(frameDt = FIXED_DT) {
   if (background3d.ready) {
     background3d.update(frameDt, state.levelIndex, state.ripples.length);
@@ -2528,11 +2550,11 @@ function render(frameDt = FIXED_DT) {
   ctx.translate(state.cameraOffsetX, state.cameraOffsetY);
   ctx.globalCompositeOperation = "lighter";
 
-  const enemiesByDepth = [...state.enemies].sort((a, b) => a.y - b.y);
-  const powerupsByDepth = [...state.powerups].sort((a, b) => a.y - b.y);
+  sortEntitiesByY(state.enemies, renderScratch.enemies);
+  sortEntitiesByY(state.powerups, renderScratch.powerups);
 
-  for (const enemy of enemiesByDepth) drawEnemy(enemy);
-  for (const item of powerupsByDepth) drawPowerup(item);
+  for (let i = 0; i < renderScratch.enemies.length; i++) drawEnemy(renderScratch.enemies[i]);
+  for (let i = 0; i < renderScratch.powerups.length; i++) drawPowerup(renderScratch.powerups[i]);
   for (const b of state.bullets) drawBullet(b);
   for (const bullet of state.enemyBullets) drawEnemyBullet(bullet);
   drawArcLinks();

@@ -11,6 +11,7 @@ export class Background3D {
     this.wire = null;
     this.outerWire = null;
     this.rippleMeshes = [];
+    this.ripplePool = [];
     this.time = 0;
     this.width = width;
     this.height = height;
@@ -215,6 +216,23 @@ export class Background3D {
     }
   }
 
+  buildRippleMesh() {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.11, 0.15, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0xa6feff,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
+    );
+    ring.rotation.x = 0.32;
+    ring.visible = false;
+    this.scene.add(ring);
+    return ring;
+  }
+
   applyLevelTheme(levelIndex) {
     if (!this.ready || levelIndex === this.currentThemeLevel) return;
     this.currentThemeLevel = levelIndex;
@@ -265,25 +283,16 @@ export class Background3D {
     if (!this.ready) return;
     const nx = (x / Math.max(1, this.width)) * 2 - 1;
     const ny = 1 - (y / Math.max(1, this.height)) * 2;
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.11, 0.15, 64),
-      new THREE.MeshBasicMaterial({
-        color: 0xa6feff,
-        transparent: true,
-        opacity: 0.82,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
-    );
+    const ring = this.ripplePool.pop() || this.buildRippleMesh();
     ring.position.set(nx * 3.45, ny * 2.15, 2.25);
-    ring.rotation.x = 0.32;
-    this.scene.add(ring);
+    ring.scale.set(1, 1, 1);
+    ring.visible = true;
+    ring.material.opacity = 0.82;
     this.rippleMeshes.push({ mesh: ring, life: 1, speed: 1.8 + power * 0.3 });
     if (this.rippleMeshes.length > 20) {
       const oldest = this.rippleMeshes.shift();
-      this.scene.remove(oldest.mesh);
-      oldest.mesh.geometry.dispose();
-      oldest.mesh.material.dispose();
+      oldest.mesh.visible = false;
+      this.ripplePool.push(oldest.mesh);
     }
   }
 
@@ -330,9 +339,8 @@ export class Background3D {
       ripple.mesh.scale.multiplyScalar(1 + dt * ripple.speed);
       ripple.mesh.material.opacity = Math.max(0, ripple.life) * 0.76;
       if (ripple.life <= 0) {
-        this.scene.remove(ripple.mesh);
-        ripple.mesh.geometry.dispose();
-        ripple.mesh.material.dispose();
+        ripple.mesh.visible = false;
+        this.ripplePool.push(ripple.mesh);
         this.rippleMeshes.splice(i, 1);
       }
     }
