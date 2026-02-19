@@ -36,7 +36,7 @@
           <div id="hud-level-info" class="hud-corner hud-level-corner">Level 1 • Kills 0/0</div>
           <div id="hud-weapon" class="hud-corner hud-weapon-corner">Weapon: Standard Blaster</div>
           <div id="hud-powerup-info" class="hud-powerup-info">
-            Rapid: faster fire • Shield: contact immunity • Scatter: multi-shot • Cannon (E): massive blast • Heart: restore health • Nova: wipe
+            Rapid: faster fire • Shield: contact immunity • Scatter: multi-shot • Drone: auto-fire • Arc: chain shots • Gravity: pull + burn aura • Cannon (E): massive blast • Phase (Q): shockwave • Overdrive (R): burst mode
           </div>
           <section id="menu-screen" class="overlay active">
             <h1>NEON GEOMETRY RIFT</h1>
@@ -44,7 +44,7 @@
             <button id="start-btn" class="action-btn">Start Run</button>
             <p class="controls">
               Move: WASD / Arrows • Aim: Mouse • Fire: Hold Left Mouse or Space<br />
-              Dash: Shift • Cannon Blast: E • Pause: P • Fullscreen: F • Audio Mute: M
+              Dash: Shift • Phase Pulse: Q • Overdrive: R • Cannon Blast: E • Pause: P • Fullscreen: F • Audio Mute: M
             </p>
             <h2>Overall Highscores</h2>
             <ol id="overall-highscore-list"></ol>
@@ -58,6 +58,11 @@
           <section id="pause-screen" class="overlay">
             <h2>Paused</h2>
             <p>Press P to resume.</p>
+          </section>
+          <section id="draft-screen" class="overlay draft-screen">
+            <h2>Relic Draft</h2>
+            <p id="draft-subtitle" class="tagline">Choose one relic to define this run.</p>
+            <div id="draft-choice-grid" class="draft-choice-grid"></div>
           </section>
           <section id="game-over-screen" class="overlay">
             <h2>Run Failed</h2>

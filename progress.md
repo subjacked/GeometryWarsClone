@@ -98,3 +98,53 @@ TODO / Next-agent suggestions:
 - Validation:
   - `npm run typecheck` passed.
   - `npm run build` passed.
+- Added roguelike systems (first full pass):
+  - New between-level relic draft overlay (`#draft-screen`) with 3 selectable relic choices.
+  - Relic stack system with capped stacks and run-persistent stat scaling.
+  - Level mutator system with per-level anomalies (speed/hp/spawn/drop modifiers).
+- Gameplay now reacts to relic stats:
+  - Fire rate scaling.
+  - Move speed and dash cooldown scaling.
+  - Scatter extra projectiles.
+  - Cannon radius/boss damage scaling + per-level cannon charges.
+  - Powerup drop chance scaling.
+  - On-kill health/shield sustain.
+  - Score multiplier scaling.
+  - Max health/shield scaling.
+- Flow updates:
+  - Level clear now enters relic draft before warp jump.
+  - Draft selection applies relic, then starts warp transition.
+  - Pause/visibility logic includes draft mode.
+- HUD/text updates:
+  - HUD now shows current mutator and relic count.
+  - `render_game_to_text` includes mutator, relic stacks, and draft choices.
+- Validation:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Smoke run artifacts: `output/web-game-roguelike-smoke/`.
+- AAA mechanics expansion pass (2026-02-18):
+  - Added new active ability system:
+    - `Phase Pulse` (Q) with charge + cooldown model, radial shockwave damage/knockback, enemy projectile wipe, dedicated VFX/SFX.
+    - `Overdrive` changed to manual trigger (`R`) once meter reaches 100 (no longer auto-fires instantly).
+  - Added two new high-impact powerups:
+    - `Arc Reactor`: bullets chain lightning to nearby enemies (with neon arc-link render and zap SFX).
+    - `Gravity Well`: temporary local singularity field that pulls and damages nearby enemies.
+    - Plus `Phase` pickup that grants extra Phase Pulse charge.
+  - Added skill-expression mechanic:
+    - Near-miss enemy bullets now grant overdrive meter gain.
+  - Added supporting systems and visuals:
+    - Arc-link transient entities + update/render pipeline.
+    - New player aura layers for Arc Reactor and Gravity Well states.
+    - Enhanced post-FX pass for gravity/arc energy grading.
+    - Expanded `render_game_to_text` payload with new ability/powerup state fields.
+    - Updated menu/control help and in-frame powerup/help strings.
+- Validation after pass:
+  - `npm run typecheck` passed.
+  - `npm run build` passed.
+  - Required Playwright client run generated artifacts in `output/web-game-aaa-mechanics/` (`shot-0.png`, `state-0.json`), no error artifact generated.
+  - Additional direct Playwright key-input check confirmed `Q` ability is functional (`phase_charges` decremented, `phase_cooldown` active).
+- Note for next agent:
+  - The shared Playwright helper process can occasionally hang on shutdown in this environment despite artifacts being written; if it does, terminate lingering `web_game_playwright_client.js` and `chrome-headless-shell` processes after verifying outputs.
+- Final sanity after mechanic pass:
+  - Re-ran `npm run typecheck` and `npm run build` successfully after the last tweaks.
+  - Verified no lingering dev/playwright processes.

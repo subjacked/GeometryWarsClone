@@ -319,6 +319,70 @@ body {
   display: flex;
 }
 
+.draft-screen {
+  justify-content: center;
+  gap: 14px;
+}
+
+.draft-choice-grid {
+  width: min(980px, 94%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.draft-choice {
+  border: 1px solid rgba(120, 230, 255, 0.42);
+  border-radius: 14px;
+  background:
+    linear-gradient(165deg, rgba(8, 28, 43, 0.9), rgba(8, 16, 29, 0.84)),
+    linear-gradient(120deg, rgba(83, 236, 255, 0.08), rgba(255, 96, 160, 0.07));
+  color: #defaff;
+  padding: 11px 12px;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.draft-choice:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 0 20px rgba(70, 228, 255, 0.45);
+  border-color: rgba(151, 244, 255, 0.8);
+}
+
+.draft-choice h3 {
+  margin: 0;
+  font: 700 1.05rem "Audiowide", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.draft-choice p {
+  margin: 0;
+  font-size: 0.88rem;
+  opacity: 0.95;
+}
+
+.relic-meta {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  opacity: 0.84;
+}
+
+.relic-common {
+  border-color: rgba(129, 228, 255, 0.46);
+}
+
+.relic-rare {
+  border-color: rgba(130, 255, 184, 0.55);
+}
+
+.relic-epic {
+  border-color: rgba(255, 147, 237, 0.62);
+}
+
 .overlay h1,
 .overlay h2 {
   margin: 0;
@@ -377,6 +441,32 @@ body {
   width: min(480px, 90%);
   display: grid;
   gap: 6px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108, 233, 255, 0.72) rgba(6, 20, 33, 0.7);
+}
+
+#overall-highscore-list::-webkit-scrollbar,
+#highscore-list::-webkit-scrollbar,
+#game-over-highscore-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+#overall-highscore-list::-webkit-scrollbar-track,
+#highscore-list::-webkit-scrollbar-track,
+#game-over-highscore-list::-webkit-scrollbar-track {
+  background: rgba(6, 20, 33, 0.7);
+  border-radius: 999px;
+}
+
+#overall-highscore-list::-webkit-scrollbar-thumb,
+#highscore-list::-webkit-scrollbar-thumb,
+#game-over-highscore-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(126, 238, 255, 0.92), rgba(72, 180, 255, 0.84));
+  border-radius: 999px;
 }
 
 #overall-highscore-list li,
@@ -500,5 +590,10 @@ body {
 
   .tagline {
     font-size: 1rem;
+  }
+
+  .draft-choice-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }

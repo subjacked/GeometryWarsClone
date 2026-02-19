@@ -112,6 +112,16 @@ export class AudioEngine {
     this.tone({ type: "triangle", freq: 860, duration: 0.14, volume: 0.05, sweep: 60 });
   }
 
+  arcZap() {
+    this.tone({ type: "square", freq: 940, duration: 0.045, volume: 0.035, sweep: -180 });
+  }
+
+  phasePulse() {
+    this.noise({ duration: 0.11, volume: 0.1 });
+    this.tone({ type: "triangle", freq: 310, duration: 0.16, volume: 0.085, sweep: 560 });
+    this.tone({ type: "sine", freq: 520, duration: 0.22, volume: 0.06, sweep: -170 });
+  }
+
   midiToFreq(note) {
     return 440 * Math.pow(2, (note - 69) / 12);
   }

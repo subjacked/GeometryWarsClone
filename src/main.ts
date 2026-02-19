@@ -10,6 +10,9 @@ import {
   bossHealthName,
   bossHealthWrap,
   ctx,
+  draftChoiceGrid,
+  draftScreen,
+  draftSubtitle,
   gameOverHighscoreList,
   gameOverHighscoreTitle,
   gameOverScreen,
@@ -49,8 +52,141 @@ const BASE_ENEMY_POINTS: Record<EnemyType, number> = {
   boss: 2400,
 };
 
+const RELIC_DEFS = [
+  {
+    id: "overclock",
+    name: "Overclock Lattice",
+    rarity: "common",
+    maxStacks: 4,
+    desc: "+16% fire rate per stack.",
+  },
+  {
+    id: "hypercore",
+    name: "Hypercore Cell",
+    rarity: "rare",
+    maxStacks: 4,
+    desc: "+20 max health per stack.",
+  },
+  {
+    id: "prism",
+    name: "Prism Array",
+    rarity: "rare",
+    maxStacks: 3,
+    desc: "Scatter adds 2 extra projectiles per stack.",
+  },
+  {
+    id: "aegis",
+    name: "Aegis Weave",
+    rarity: "rare",
+    maxStacks: 3,
+    desc: "+24 max shield and +1 shield on kill per stack.",
+  },
+  {
+    id: "singularity",
+    name: "Singularity Cannon",
+    rarity: "epic",
+    maxStacks: 2,
+    desc: "Cannon radius and boss damage massively increase.",
+  },
+  {
+    id: "bloodcode",
+    name: "Bloodcode Injector",
+    rarity: "epic",
+    maxStacks: 3,
+    desc: "Recover health on kills and increase score gain.",
+  },
+  {
+    id: "phaseboot",
+    name: "Phase Boots",
+    rarity: "common",
+    maxStacks: 4,
+    desc: "Move faster and dash cooldown reduced.",
+  },
+  {
+    id: "bounty",
+    name: "Bounty Decoder",
+    rarity: "common",
+    maxStacks: 4,
+    desc: "Higher powerup drop chance and score gain.",
+  },
+];
+
+const MUTATOR_DEFS = [
+  {
+    id: "stable",
+    name: "Stable Sector",
+    desc: "No anomaly detected.",
+    enemySpeedMult: 1,
+    enemyHpMult: 1,
+    spawnIntervalMult: 1,
+    powerupDropMult: 1,
+    weight: 0,
+  },
+  {
+    id: "feral",
+    name: "Feral Swarm",
+    desc: "Enemies rush harder.",
+    enemySpeedMult: 1.24,
+    enemyHpMult: 1,
+    spawnIntervalMult: 0.92,
+    powerupDropMult: 1.08,
+    weight: 6,
+  },
+  {
+    id: "bulwark",
+    name: "Bulwark Matrix",
+    desc: "Heavier hulls everywhere.",
+    enemySpeedMult: 0.96,
+    enemyHpMult: 1.34,
+    spawnIntervalMult: 1.02,
+    powerupDropMult: 1.2,
+    weight: 5,
+  },
+  {
+    id: "chaos",
+    name: "Chaos Flux",
+    desc: "Fast and dense warzone.",
+    enemySpeedMult: 1.14,
+    enemyHpMult: 1.14,
+    spawnIntervalMult: 0.85,
+    powerupDropMult: 1.18,
+    weight: 4,
+  },
+  {
+    id: "jackpot",
+    name: "Jackpot Storm",
+    desc: "More drops, deadlier opposition.",
+    enemySpeedMult: 1.08,
+    enemyHpMult: 1.2,
+    spawnIntervalMult: 0.94,
+    powerupDropMult: 1.5,
+    weight: 3,
+  },
+];
+
+const ELITE_MODS = ["hasted", "armored", "volatile"] as const;
+
 const audio = new AudioEngine();
 const background3d = new Background3D(BASE_WIDTH, BASE_HEIGHT);
+
+function createDefaultRelicStats() {
+  return {
+    fireRateMult: 1,
+    moveSpeedMult: 1,
+    dashCooldownMult: 1,
+    bulletDamageBonus: 0,
+    scatterExtraProjectiles: 0,
+    cannonRadiusMult: 1,
+    cannonBossDamageBonus: 0,
+    cannonPerLevel: 0,
+    powerupDropMult: 1,
+    onKillHealHealth: 0,
+    onKillHealShield: 0,
+    maxHealthBonus: 0,
+    maxShieldBonus: 0,
+    scoreMult: 1,
+  };
+}
 
 const input = {
   keys: new Set(),
@@ -59,6 +195,8 @@ const input = {
   firing: false,
   dashQueued: false,
   cannonQueued: false,
+  phaseQueued: false,
+  overdriveQueued: false,
 };
 
 const state = {
@@ -81,6 +219,8 @@ const state = {
   warpDuration: 1.15,
   player: null,
   bullets: [],
+  enemyBullets: [],
+  arcLinks: [],
   enemies: [],
   particles: [],
   ripples: [],
@@ -95,6 +235,15 @@ const state = {
   bossDefeated: false,
   powerupMessage: "",
   powerupMessageTimer: 0,
+  overdriveMeter: 0,
+  overdriveTimer: 0,
+  hitStopTimer: 0,
+  cinematicPulse: 0,
+  draftChoices: [],
+  relicStacks: {},
+  relicStats: createDefaultRelicStats(),
+  mutator: MUTATOR_DEFS[0],
+  mutatorHistory: [],
 };
 
 let lastTime = performance.now();
@@ -159,6 +308,146 @@ function weightedPick(entries) {
   return entries[entries.length - 1][0];
 }
 
+function getRelicDefById(id) {
+  return RELIC_DEFS.find((relic) => relic.id === id) || null;
+}
+
+function getRelicStack(id) {
+  return state.relicStacks[id] || 0;
+}
+
+function recomputeRelicStats() {
+  const stats = createDefaultRelicStats();
+  const overclock = getRelicStack("overclock");
+  const hypercore = getRelicStack("hypercore");
+  const prism = getRelicStack("prism");
+  const aegis = getRelicStack("aegis");
+  const singularity = getRelicStack("singularity");
+  const bloodcode = getRelicStack("bloodcode");
+  const phaseboot = getRelicStack("phaseboot");
+  const bounty = getRelicStack("bounty");
+
+  stats.fireRateMult += overclock * 0.16;
+  stats.maxHealthBonus += hypercore * 20;
+  stats.scatterExtraProjectiles += prism * 2;
+  stats.maxShieldBonus += aegis * 24;
+  stats.onKillHealShield += aegis * 1;
+  stats.cannonRadiusMult += singularity * 0.28;
+  stats.cannonBossDamageBonus += singularity * 6;
+  stats.cannonPerLevel += singularity;
+  stats.onKillHealHealth += bloodcode * 1.3;
+  stats.scoreMult += bloodcode * 0.07;
+  stats.moveSpeedMult += phaseboot * 0.08;
+  stats.dashCooldownMult = Math.max(0.55, 1 - phaseboot * 0.08);
+  stats.powerupDropMult += bounty * 0.22;
+  stats.scoreMult += bounty * 0.06;
+
+  state.relicStats = stats;
+}
+
+function applyRelicStatsToPlayer(healFraction = 0) {
+  const p = state.player;
+  if (!p) return;
+  const previousMaxHealth = p.maxEnergy;
+  const previousMaxShield = p.maxShield;
+  p.maxEnergy = 100 + state.relicStats.maxHealthBonus;
+  p.maxShield = 100 + state.relicStats.maxShieldBonus;
+  p.speed = 290 * state.relicStats.moveSpeedMult;
+
+  if (p.maxEnergy > previousMaxHealth && healFraction > 0) {
+    p.energy += (p.maxEnergy - previousMaxHealth) * healFraction;
+  }
+  if (p.maxShield > previousMaxShield && healFraction > 0 && p.shield > 0) {
+    p.shield += (p.maxShield - previousMaxShield) * healFraction;
+  }
+  p.energy = clamp(p.energy, 0, p.maxEnergy);
+  p.shield = clamp(p.shield, 0, p.maxShield);
+}
+
+function getMutatorForLevel(levelIndex) {
+  if (levelIndex <= 0) return MUTATOR_DEFS[0];
+  const weighted = MUTATOR_DEFS
+    .filter((mutator) => mutator.id !== "stable")
+    .map((mutator) => [mutator, mutator.weight]);
+  let next = weightedPick(weighted);
+  if (state.mutator && next.id === state.mutator.id && weighted.length > 1) {
+    next = weightedPick(weighted);
+  }
+  return next;
+}
+
+function applyLevelMutator(levelIndex) {
+  state.mutator = getMutatorForLevel(levelIndex);
+  state.mutatorHistory.push(state.mutator.id);
+  if (state.mutatorHistory.length > 8) state.mutatorHistory.shift();
+}
+
+function rollDraftChoices(count = 3) {
+  const available = RELIC_DEFS.filter((relic) => getRelicStack(relic.id) < relic.maxStacks);
+  if (!available.length) return [];
+  const pool = [...available];
+  const picks = [];
+  while (pool.length && picks.length < count) {
+    const index = randInt(0, pool.length - 1);
+    const relic = pool.splice(index, 1)[0];
+    picks.push(relic.id);
+  }
+  return picks;
+}
+
+function renderDraftChoices() {
+  draftChoiceGrid.innerHTML = "";
+  const relicCount = Object.keys(state.relicStacks).length;
+  const mutatorLine = state.mutator?.id === "stable" ? "No active anomaly." : `${state.mutator.name}: ${state.mutator.desc}`;
+  draftSubtitle.textContent = `Level ${state.levelIndex + 1} clear • ${relicCount} relics online • ${mutatorLine}`;
+
+  for (let idx = 0; idx < state.draftChoices.length; idx++) {
+    const relicId = state.draftChoices[idx];
+    const relic = getRelicDefById(relicId);
+    if (!relic) continue;
+    const stack = getRelicStack(relic.id);
+    const nextStack = stack + 1;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `draft-choice relic-${relic.rarity}`;
+    button.dataset.relicId = relic.id;
+    button.innerHTML = `
+      <div class="relic-meta">[${idx + 1}] ${relic.rarity} RELIC • Stack ${nextStack}/${relic.maxStacks}</div>
+      <h3>${relic.name}</h3>
+      <p>${relic.desc}</p>
+    `;
+    draftChoiceGrid.appendChild(button);
+  }
+}
+
+function openDraftScreen() {
+  state.draftChoices = rollDraftChoices(3);
+  if (!state.draftChoices.length) {
+    startWarpJump();
+    return;
+  }
+  input.firing = false;
+  state.mode = "draft";
+  renderDraftChoices();
+  showOverlay(draftScreen);
+  syncMusicForMode();
+}
+
+function applyDraftRelic(relicId) {
+  const relic = getRelicDefById(relicId);
+  if (!relic) return;
+  const current = getRelicStack(relic.id);
+  if (current >= relic.maxStacks) return;
+  state.relicStacks[relic.id] = current + 1;
+  recomputeRelicStats();
+  applyRelicStatsToPlayer(0.45);
+  state.powerupMessage = `Relic Online: ${relic.name}`;
+  state.powerupMessageTimer = 3.2;
+  hideOverlay(draftScreen);
+  startWarpJump();
+  syncMusicForMode();
+}
+
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(800, Math.floor(rect.width));
@@ -194,6 +483,10 @@ function spawnPlayer() {
     dashTimer: 0,
     rapidTimer: 0,
     scatterTimer: 0,
+    droneTimer: 0,
+    droneShotCooldown: 0,
+    arcTimer: 0,
+    gravityWellTimer: 0,
     shieldTimer: 0,
     shieldMaxTimer: 6,
     energy: 100,
@@ -204,6 +497,8 @@ function spawnPlayer() {
     shieldRegenActive: false,
     cannonCharges: 0,
     cannonCooldown: 0,
+    phaseCharges: 1,
+    phaseCooldown: 0,
     trail: [],
   };
 }
@@ -223,7 +518,13 @@ function resetRun() {
   state.pauseReturnMode = "playing";
   state.shake = 0;
   state.flash = 0;
+  state.cinematicPulse = 0;
+  state.hitStopTimer = 0;
+  state.overdriveMeter = 0;
+  state.overdriveTimer = 0;
   state.bullets.length = 0;
+  state.enemyBullets.length = 0;
+  state.arcLinks.length = 0;
   state.enemies.length = 0;
   state.particles.length = 0;
   state.ripples.length = 0;
@@ -235,11 +536,24 @@ function resetRun() {
   state.bossDefeated = false;
   state.powerupMessage = "";
   state.powerupMessageTimer = 0;
+  state.draftChoices = [];
+  state.relicStacks = {};
+  state.relicStats = createDefaultRelicStats();
+  state.mutator = MUTATOR_DEFS[0];
+  state.mutatorHistory = [];
+  input.phaseQueued = false;
+  input.overdriveQueued = false;
+  input.cannonQueued = false;
+  input.dashQueued = false;
   scoreSaveStatus.textContent = "";
   spawnPlayer();
+  recomputeRelicStats();
+  applyRelicStatsToPlayer(0);
+  applyLevelMutator(0);
   hideOverlay(gameOverScreen);
   hideOverlay(menuScreen);
   hideOverlay(pauseScreen);
+  hideOverlay(draftScreen);
   updateHud();
   syncMusicForMode();
 }
@@ -368,7 +682,11 @@ function describePowerup(type) {
   if (type === "rapid") return "Rapid Fire: higher fire rate";
   if (type === "shield") return "Shield: ram enemies safely";
   if (type === "scatter") return "Scatter: multi-direction shots";
+  if (type === "drone") return "Drone Wing: autonomous support fire";
+  if (type === "arc") return "Arc Reactor: bullets chain to nearby enemies";
+  if (type === "gravity") return "Gravity Well: pull and melt nearby enemies";
   if (type === "cannon") return "Heavy Cannon: press E for radial blast";
+  if (type === "phase") return "Phase Pulse: +1 charge for Q shockwave";
   if (type === "heart") return "Heart: restores health";
   if (type === "nova") return "Nova: instant arena wipe";
   return "";
@@ -390,11 +708,21 @@ function updateHud() {
   const weaponLabel = p.scatterTimer > 0 ? "Scatter Blaster" : p.rapidTimer > 0 ? "Rapid Blaster" : "Standard Blaster";
   const aegis = p.shieldTimer > 0 ? `Aegis ${p.shieldTimer.toFixed(1)}s` : "Aegis offline";
   const objective = levelConfig().targetKills;
-  hudLevelInfo.textContent = `Level ${currentLevelLabel()} • Kills ${state.killsInLevel}/${objective}`;
-  hudWeapon.textContent = `Weapon: ${weaponLabel} • Cannon ${p.cannonCharges} • ${aegis}`;
+  const relicCount = Object.keys(state.relicStacks).length;
+  const mutatorLabel = state.mutator?.id === "stable" ? "Stable Sector" : state.mutator?.name;
+  hudLevelInfo.textContent = `Level ${currentLevelLabel()} • Kills ${state.killsInLevel}/${objective} • ${mutatorLabel}`;
+  const overdriveLabel = state.overdriveTimer > 0
+    ? `Overdrive ${(state.overdriveTimer).toFixed(1)}s`
+    : state.overdriveMeter >= 100
+    ? "Overdrive READY [R]"
+    : `Overdrive ${Math.floor(state.overdriveMeter)}%`;
+  const phaseText = p.phaseCooldown > 0
+    ? `Pulse Q ${p.phaseCharges} (${p.phaseCooldown.toFixed(1)}s)`
+    : `Pulse Q ${p.phaseCharges}`;
+  hudWeapon.textContent = `Weapon: ${weaponLabel} • Cannon ${p.cannonCharges} • ${phaseText} • ${aegis} • ${overdriveLabel} • Relics ${relicCount}`;
   hudPowerupInfo.textContent = state.powerupMessageTimer > 0 && state.powerupMessage
     ? state.powerupMessage
-    : "Rapid: faster fire • Shield: contact immunity • Scatter: multi-shot • Cannon (E): massive blast • Heart: restore health • Nova: wipe";
+    : "Rapid: faster fire • Shield: contact immunity • Scatter: multi-shot • Drone: auto-fire • Arc: chain shots • Gravity: pull + burn aura • Cannon (E): massive blast • Phase (Q): shockwave • Overdrive (R): burst mode";
 
   const liveBoss = state.enemies.find((enemy) => enemy.type === "boss");
   if (!liveBoss) {
@@ -410,9 +738,108 @@ function updateHud() {
   }
 }
 
+function activateOverdrive() {
+  state.overdriveMeter = 0;
+  state.overdriveTimer = 8.5;
+  state.cinematicPulse = Math.max(state.cinematicPulse, 0.95);
+  state.flash = Math.max(state.flash, 0.48);
+  state.shake = Math.max(state.shake, 12);
+  const p = state.player;
+  if (p) {
+    emitParticles(p.x, p.y, "#91f6ff", 26, 240);
+  }
+}
+
+function addOverdrive(value) {
+  if (state.overdriveTimer > 0) return;
+  state.overdriveMeter = clamp(state.overdriveMeter + value, 0, 100);
+}
+
+function spawnArcLink(x1, y1, x2, y2, color = "#9ff7ff") {
+  state.arcLinks.push({
+    x1,
+    y1,
+    x2,
+    y2,
+    life: 0.16,
+    maxLife: 0.16,
+    color,
+  });
+  if (state.arcLinks.length > 36) {
+    state.arcLinks.shift();
+  }
+}
+
+function triggerPhasePulse() {
+  const p = state.player;
+  if (!p || p.phaseCharges <= 0 || p.phaseCooldown > 0) return;
+  p.phaseCharges -= 1;
+  p.phaseCooldown = 2.2;
+  const radius = 280;
+  state.shake = Math.max(state.shake, 22);
+  state.flash = Math.max(state.flash, 0.52);
+  state.cinematicPulse = Math.max(state.cinematicPulse, 0.82);
+  audio.phasePulse();
+  spawnRipple(p.x, p.y, 2.9);
+  emitParticles(p.x, p.y, "#b2fdff", 36, 300);
+  state.powerupMessage = "Phase Pulse: Reality Shockwave";
+  state.powerupMessageTimer = 1.8;
+
+  for (let i = state.enemyBullets.length - 1; i >= 0; i--) {
+    const bullet = state.enemyBullets[i];
+    const dx = bullet.x - p.x;
+    const dy = bullet.y - p.y;
+    if (Math.hypot(dx, dy) > radius * 1.12) continue;
+    emitParticles(bullet.x, bullet.y, "#bbfaff", 3, 120);
+    state.enemyBullets.splice(i, 1);
+  }
+
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    const enemy = state.enemies[i];
+    const dx = enemy.x - p.x;
+    const dy = enemy.y - p.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const falloff = clamp(1 - dist / radius, 0, 1);
+    if (falloff <= 0) continue;
+    enemy.vx += (dx / dist) * (260 + falloff * 340);
+    enemy.vy += (dy / dist) * (260 + falloff * 340);
+    enemy.hp -= enemy.type === "boss" ? 1.5 + falloff * 1.5 : 1.6 + falloff * 3.2;
+    emitParticles(enemy.x, enemy.y, "#91f5ff", enemy.type === "boss" ? 4 : 2, 100);
+    if (enemy.hp <= 0) {
+      destroyEnemy(i, true);
+    }
+  }
+}
+
+function damagePlayer(amount, invulnSeconds = 1.2) {
+  const p = state.player;
+  if (!p || p.invulnerable > 0) return false;
+  const absorbed = Math.min(p.shield, amount);
+  p.shield = Math.max(0, p.shield - absorbed);
+  if (absorbed > 0) {
+    p.shieldRegenDelay = p.shield > 0 ? 1.9 : 0;
+    p.shieldRegenActive = false;
+  }
+  const spill = Math.max(0, amount - absorbed);
+  if (spill > 0) {
+    p.energy = Math.max(0, p.energy - spill);
+  }
+  p.invulnerable = p.energy <= 0 ? 1.8 : invulnSeconds;
+  state.shake = Math.max(state.shake, 16);
+  state.flash = Math.max(state.flash, 0.38);
+  state.cinematicPulse = Math.max(state.cinematicPulse, 0.45);
+  audio.playerDamaged();
+  emitParticles(p.x, p.y, "#ff7892", 18, 190);
+  if (p.energy <= 0) {
+    onRunFailed();
+    return true;
+  }
+  return false;
+}
+
 function addScore(amount) {
   const multiplier = Math.max(1, Math.min(12, state.streak || 1));
-  state.score += amount * multiplier;
+  state.score += amount * multiplier * state.relicStats.scoreMult;
 }
 
 function emitParticles(x, y, color, count, speed) {
@@ -463,6 +890,9 @@ function spawnEnemy(forceType: EnemyType | null = null, x: number | null = null,
     trail: [],
     color: "#60f0ff",
     contactDamage: 1,
+    elite: false,
+    eliteMod: "none",
+    shootCooldown: rand(0.4, 1.2),
   };
 
   if (type === "seeker") {
@@ -505,6 +935,27 @@ function spawnEnemy(forceType: EnemyType | null = null, x: number | null = null,
     enemy.contactDamage = 3;
     enemy.spin = 2.1;
   }
+  const mutator = state.mutator || MUTATOR_DEFS[0];
+  enemy.hp = Math.max(1, Math.round(enemy.hp * mutator.enemyHpMult));
+  enemy.speed *= mutator.enemySpeedMult;
+
+  if (enemy.type !== "boss" && enemy.type !== "shard" && Math.random() < clamp(0.05 + state.levelIndex * 0.018, 0, 0.42)) {
+    enemy.elite = true;
+    enemy.eliteMod = weightedPick(
+      ELITE_MODS.map((mod) => [mod, mod === "hasted" ? 5 : mod === "armored" ? 4 : 3])
+    );
+    if (enemy.eliteMod === "hasted") {
+      enemy.speed *= 1.35;
+      enemy.color = "#7effe9";
+    } else if (enemy.eliteMod === "armored") {
+      enemy.hp = Math.round(enemy.hp * 1.85);
+      enemy.radius += 2;
+      enemy.color = "#ffd88a";
+    } else if (enemy.eliteMod === "volatile") {
+      enemy.contactDamage += 1;
+      enemy.color = "#ff8ea8";
+    }
+  }
   enemy.maxHp = enemy.hp;
 
   if (autoSpawnAtEdge) {
@@ -533,17 +984,25 @@ function spawnEnemy(forceType: EnemyType | null = null, x: number | null = null,
 
 function spawnPowerup(x, y) {
   const roll = Math.random();
-  const type = roll < 0.26
+  const type = roll < 0.2
     ? "rapid"
-    : roll < 0.46
+    : roll < 0.36
     ? "shield"
-    : roll < 0.64
+    : roll < 0.5
     ? "scatter"
-    : roll < 0.8
+    : roll < 0.6
+    ? "drone"
+    : roll < 0.7
+    ? "arc"
+    : roll < 0.78
+    ? "gravity"
+    : roll < 0.86
     ? "cannon"
-    : roll < 0.92
+    : roll < 0.94
     ? "heart"
-    : "nova";
+    : roll < 0.985
+    ? "nova"
+    : "phase";
   state.powerups.push({
     type,
     x,
@@ -555,7 +1014,7 @@ function spawnPowerup(x, y) {
   });
 }
 
-function fireBulletAtAngle(angle, speed, radius, glow, spread = 0) {
+function fireBulletAtAngle(angle, speed, radius, glow, spread = 0, damage = 1, arcChains = 0) {
   const p = state.player;
   state.bullets.push({
     x: p.x,
@@ -565,6 +1024,28 @@ function fireBulletAtAngle(angle, speed, radius, glow, spread = 0) {
     radius,
     life: 1.25,
     glow,
+    damage,
+    arcChains,
+  });
+}
+
+function fireEnemyProjectile(enemy, speed = 250, damage = 12, color = "#ff7fa0") {
+  const p = state.player;
+  const dx = p.x - enemy.x;
+  const dy = p.y - enemy.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const variance = enemy.type === "boss" ? 0.08 : 0.12;
+  const angle = Math.atan2(dy, dx) + rand(-variance, variance);
+  state.enemyBullets.push({
+    x: enemy.x,
+    y: enemy.y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    radius: enemy.type === "boss" ? 6.2 : 4.8,
+    life: enemy.type === "boss" ? 2.1 : 1.9,
+    damage,
+    color,
+    nearMissed: false,
   });
 }
 
@@ -573,7 +1054,7 @@ function fireCannonBlast() {
   if (p.cannonCharges <= 0 || p.cannonCooldown > 0) return;
   p.cannonCharges -= 1;
   p.cannonCooldown = 1.1;
-  const radius = 230;
+  const radius = 230 * state.relicStats.cannonRadiusMult;
   state.shake = Math.max(state.shake, 24);
   state.flash = Math.max(state.flash, 0.56);
   spawnRipple(p.x, p.y, 2.7);
@@ -585,7 +1066,7 @@ function fireCannonBlast() {
     const dist = Math.hypot(dx, dy);
     if (dist > radius) continue;
     if (enemy.type === "boss") {
-      enemy.hp -= 12;
+      enemy.hp -= 12 + state.relicStats.cannonBossDamageBonus;
       emitParticles(enemy.x, enemy.y, "#ff95da", 20, 210);
       if (enemy.hp <= 0) destroyEnemy(i, true);
     } else {
@@ -600,19 +1081,26 @@ function shootBullet() {
   const dy = input.mouseY - p.y;
   const spread = rand(-0.07, 0.07);
   const base = Math.atan2(dy, dx) + spread;
-  const speed = p.rapidTimer > 0 ? 660 : 610;
+  const overdrive = state.overdriveTimer > 0;
+  const speed = (p.rapidTimer > 0 ? 660 : 610) * (overdrive ? 1.08 : 1);
   const radius = p.rapidTimer > 0 ? 4.6 : 4;
-  const glow = p.rapidTimer > 0 ? "#fcf980" : "#67ecff";
+  const glow = overdrive ? "#fff59a" : p.rapidTimer > 0 ? "#fcf980" : "#67ecff";
+  const bulletDamage = 1 + state.relicStats.bulletDamageBonus;
+  const arcChains = p.arcTimer > 0 ? 2 : 0;
   if (p.scatterTimer > 0) {
     const offsets = [-0.42, -0.2, 0, 0.2, 0.42];
+    const extra = state.relicStats.scatterExtraProjectiles;
+    if (extra >= 1) offsets.push(-0.62, 0.62);
+    if (extra >= 2) offsets.push(-0.82, 0.82);
+    if (extra >= 3) offsets.push(-1.04, 1.04);
     for (const offset of offsets) {
-      fireBulletAtAngle(base, speed * 0.95, radius, "#8ff6ff", offset);
+      fireBulletAtAngle(base, speed * 0.95, radius, "#8ff6ff", offset, bulletDamage * 0.86, Math.max(1, arcChains - 1));
     }
   } else {
-    fireBulletAtAngle(base, speed, radius, glow);
+    fireBulletAtAngle(base, speed, radius, glow, 0, bulletDamage, arcChains);
   }
   audio.shoot();
-  emitParticles(p.x, p.y, "#75f0ff", p.scatterTimer > 0 ? 4 : 2, 58);
+  emitParticles(p.x, p.y, overdrive ? "#ffe7a2" : "#75f0ff", p.scatterTimer > 0 ? 4 : 2, 58);
 }
 
 function trackTrail(entity, max = 9) {
@@ -620,9 +1108,25 @@ function trackTrail(entity, max = 9) {
   if (entity.trail.length > max) entity.trail.shift();
 }
 
+function getNearestEnemy(fromX, fromY) {
+  let nearest = null;
+  let best = Infinity;
+  for (const enemy of state.enemies) {
+    const dx = enemy.x - fromX;
+    const dy = enemy.y - fromY;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < best) {
+      best = distSq;
+      nearest = enemy;
+    }
+  }
+  return nearest;
+}
+
 function handlePlayer(dt) {
   const p = state.player;
   const cfg = levelConfig();
+  const overdrive = state.overdriveTimer > 0;
   const moveX = (input.keys.has("KeyD") || input.keys.has("ArrowRight") ? 1 : 0) -
     (input.keys.has("KeyA") || input.keys.has("ArrowLeft") ? 1 : 0);
   const moveY = (input.keys.has("KeyS") || input.keys.has("ArrowDown") ? 1 : 0) -
@@ -632,7 +1136,7 @@ function handlePlayer(dt) {
   if (moving > 0) {
     const nx = moveX / moving;
     const ny = moveY / moving;
-    const currentSpeed = p.speed + cfg.playerSpeedBonus;
+    const currentSpeed = (p.speed + cfg.playerSpeedBonus) * (overdrive ? 1.14 : 1);
     p.vx += nx * currentSpeed * dt * 7.4;
     p.vy += ny * currentSpeed * dt * 7.4;
     emitParticles(p.x, p.y, "#2ed8ff", 1, 22);
@@ -662,7 +1166,7 @@ function handlePlayer(dt) {
     const dashY = moving > 0 ? moveY / moving : Math.sin(Math.atan2(input.mouseY - p.y, input.mouseX - p.x));
     p.vx += dashX * 650;
     p.vy += dashY * 650;
-    p.dashCooldown = 1.3;
+    p.dashCooldown = 1.3 * state.relicStats.dashCooldownMult * (overdrive ? 0.78 : 1);
     p.dashTimer = 0.18;
     state.shake = Math.max(state.shake, 10);
     emitParticles(p.x, p.y, "#8ce9ff", 16, 250);
@@ -673,6 +1177,14 @@ function handlePlayer(dt) {
     fireCannonBlast();
   }
   input.cannonQueued = false;
+  if (input.phaseQueued) {
+    triggerPhasePulse();
+  }
+  input.phaseQueued = false;
+  if (input.overdriveQueued && state.overdriveMeter >= 100 && state.overdriveTimer <= 0) {
+    activateOverdrive();
+  }
+  input.overdriveQueued = false;
 
   p.vx *= p.dashTimer > 0 ? 0.96 : 0.89;
   p.vy *= p.dashTimer > 0 ? 0.96 : 0.89;
@@ -687,14 +1199,30 @@ function handlePlayer(dt) {
   if (p.dashTimer > 0) p.dashTimer -= dt;
   if (p.rapidTimer > 0) p.rapidTimer -= dt;
   if (p.scatterTimer > 0) p.scatterTimer -= dt;
+  if (p.droneTimer > 0) p.droneTimer -= dt;
+  if (p.droneShotCooldown > 0) p.droneShotCooldown -= dt;
+  if (p.arcTimer > 0) p.arcTimer -= dt;
+  if (p.gravityWellTimer > 0) p.gravityWellTimer -= dt;
   if (p.shieldTimer > 0) p.shieldTimer -= dt;
   if (p.cannonCooldown > 0) p.cannonCooldown -= dt;
+  if (p.phaseCooldown > 0) p.phaseCooldown -= dt;
 
   const triggerHeld = input.firing || input.keys.has("Space");
-  const cooldown = p.scatterTimer > 0 ? 0.2 : p.rapidTimer > 0 ? 0.07 : 0.12;
+  const cooldownBase = p.scatterTimer > 0 ? 0.2 : p.rapidTimer > 0 ? 0.07 : 0.12;
+  const cooldown = Math.max(0.03, cooldownBase / (state.relicStats.fireRateMult * (overdrive ? 1.34 : 1)));
   if (triggerHeld && p.fireCooldown <= 0) {
     shootBullet();
     p.fireCooldown = cooldown;
+  }
+
+  if (p.droneTimer > 0 && p.droneShotCooldown <= 0 && state.enemies.length > 0) {
+    const target = getNearestEnemy(p.x, p.y);
+    if (target) {
+      const angle = Math.atan2(target.y - p.y, target.x - p.x);
+      fireBulletAtAngle(angle, 700, 3.6, "#9cfff0", rand(-0.05, 0.05), 0.9, p.arcTimer > 0 ? 1 : 0);
+      emitParticles(p.x, p.y, "#97ffe6", 2, 70);
+      p.droneShotCooldown = 0.22;
+    }
   }
 
   trackTrail(p, 16);
@@ -712,11 +1240,53 @@ function handleBullets(dt) {
   }
 }
 
+function handleEnemyBullets(dt) {
+  const p = state.player;
+  for (let i = state.enemyBullets.length - 1; i >= 0; i--) {
+    const bullet = state.enemyBullets[i];
+    bullet.x += bullet.vx * dt;
+    bullet.y += bullet.vy * dt;
+    bullet.life -= dt;
+    if (bullet.life <= 0 || !inBounds(bullet, 40)) {
+      state.enemyBullets.splice(i, 1);
+      continue;
+    }
+
+    const nearMissDist = Math.hypot(bullet.x - p.x, bullet.y - p.y);
+    const collisionDist = p.radius + bullet.radius;
+    if (!bullet.nearMissed && nearMissDist > collisionDist + 4 && nearMissDist < collisionDist + 36) {
+      bullet.nearMissed = true;
+      addOverdrive(1.8);
+      emitParticles(bullet.x, bullet.y, "#9fefff", 2, 55);
+    }
+
+    if (!collideCircle(bullet, p)) continue;
+    state.enemyBullets.splice(i, 1);
+    if (p.shieldTimer > 0) {
+      emitParticles(bullet.x, bullet.y, "#97ffe0", 6, 130);
+      continue;
+    }
+    const didDie = damagePlayer(bullet.damage || 12, 0.92);
+    if (didDie) return;
+  }
+}
+
 function enemyBehavior(enemy, dt) {
   const p = state.player;
   const dx = p.x - enemy.x;
   const dy = p.y - enemy.y;
   const dist = Math.hypot(dx, dy) || 1;
+  if (p.gravityWellTimer > 0) {
+    const pull = clamp(1 - dist / 320, 0, 1);
+    if (pull > 0) {
+      const gravityForce = 140 + pull * 380;
+      enemy.vx += (dx / dist) * gravityForce * dt;
+      enemy.vy += (dy / dist) * gravityForce * dt;
+      if (dist < 84) {
+        enemy.hp -= dt * (enemy.type === "boss" ? 3.4 : 7.2);
+      }
+    }
+  }
 
   if (enemy.type === "seeker" || enemy.type === "shard") {
     enemy.vx += (dx / dist) * enemy.speed * dt * 5;
@@ -752,6 +1322,21 @@ function enemyBehavior(enemy, dt) {
     enemy.angle += enemy.spin * dt;
   }
 
+  enemy.shootCooldown -= dt;
+  if (enemy.shootCooldown <= 0) {
+    if (enemy.type === "spinner" && dist < 440) {
+      fireEnemyProjectile(enemy, enemy.elite ? 300 : 250, enemy.elite ? 14 : 11, enemy.elite ? "#ffd4a2" : "#ff90c8");
+      enemy.shootCooldown = enemy.elite ? rand(1.2, 1.8) : rand(1.6, 2.4);
+    } else if (enemy.type === "tank" && dist < 480) {
+      fireEnemyProjectile(enemy, enemy.elite ? 260 : 220, enemy.elite ? 18 : 14, enemy.elite ? "#ffb287" : "#ff8f74");
+      enemy.shootCooldown = enemy.elite ? rand(1.7, 2.5) : rand(2.2, 3.1);
+    } else if (enemy.type === "boss") {
+      fireEnemyProjectile(enemy, 290, 16, "#ff72cf");
+      fireEnemyProjectile(enemy, 290, 16, "#ff72cf");
+      enemy.shootCooldown = rand(0.65, 1.0);
+    }
+  }
+
   const damping = enemy.type === "tank" ? 0.94 : enemy.type === "boss" ? 0.975 : 0.96;
   enemy.vx *= damping;
   enemy.vy *= damping;
@@ -781,25 +1366,42 @@ function enemyBehavior(enemy, dt) {
 function destroyEnemy(index, hitByPlayer = true) {
   const enemy = state.enemies[index];
   if (!enemy) return;
-  const isHeavy = enemy.type === "tank" || enemy.type === "boss";
+  const isHeavy = enemy.type === "tank" || enemy.type === "boss" || enemy.elite;
   emitParticles(enemy.x, enemy.y, enemy.color, enemy.type === "boss" ? 54 : isHeavy ? 26 : 16, enemy.type === "boss" ? 320 : isHeavy ? 240 : 170);
   spawnRipple(enemy.x, enemy.y, enemy.type === "boss" ? 2.4 : enemy.type === "tank" ? 1.45 : 1);
   state.shake = Math.max(state.shake, enemy.type === "boss" ? 24 : isHeavy ? 14 : 9);
   state.flash = Math.max(state.flash, enemy.type === "boss" ? 0.52 : isHeavy ? 0.34 : 0.22);
+  state.cinematicPulse = Math.max(state.cinematicPulse, enemy.type === "boss" ? 0.95 : enemy.elite ? 0.65 : 0.28);
   audio.enemyExplode();
 
   if (hitByPlayer) {
     state.streak += 1;
     state.streakTimer = 2.8;
     state.killsInLevel += 1;
-    addScore((BASE_ENEMY_POINTS[enemy.type] || 100) + state.levelIndex * 14);
-    if (Math.random() < 0.1) {
+    const eliteBonus = enemy.elite ? 180 + state.levelIndex * 9 : 0;
+    addScore((BASE_ENEMY_POINTS[enemy.type] || 100) + state.levelIndex * 14 + eliteBonus);
+    addOverdrive(enemy.type === "boss" ? 28 : enemy.elite ? 12 : 5.4);
+    const dropChance = clamp(
+      0.1 * state.relicStats.powerupDropMult * (state.mutator?.powerupDropMult || 1),
+      0.03,
+      0.72
+    );
+    if (Math.random() < dropChance) {
       spawnPowerup(enemy.x, enemy.y);
+    }
+    if (state.player) {
+      if (state.relicStats.onKillHealHealth > 0) {
+        state.player.energy = Math.min(state.player.maxEnergy, state.player.energy + state.relicStats.onKillHealHealth);
+      }
+      if (state.relicStats.onKillHealShield > 0 && state.player.shield > 0) {
+        state.player.shield = Math.min(state.player.maxShield, state.player.shield + state.relicStats.onKillHealShield);
+      }
     }
     if (enemy.type === "boss") {
       state.bossDefeated = true;
       state.killsInLevel = levelConfig().targetKills;
       addScore(5000 + state.levelIndex * 260);
+      state.hitStopTimer = Math.max(state.hitStopTimer, 0.1);
     }
   }
 
@@ -822,6 +1424,25 @@ function destroyEnemy(index, hitByPlayer = true) {
     }
   }
 
+  if (enemy.elite && enemy.eliteMod === "volatile") {
+    const blast = 132;
+    spawnRipple(enemy.x, enemy.y, 1.8);
+    for (let i = state.enemies.length - 1; i >= 0; i--) {
+      if (i === index) continue;
+      const other = state.enemies[i];
+      const dx = other.x - enemy.x;
+      const dy = other.y - enemy.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > blast) continue;
+      other.hp -= 2.2;
+      if (other.hp <= 0) destroyEnemy(i, true);
+    }
+    const playerDist = Math.hypot(state.player.x - enemy.x, state.player.y - enemy.y);
+    if (playerDist < blast && state.player.invulnerable <= 0) {
+      damagePlayer(16, 1.1);
+    }
+  }
+
   state.enemies.splice(index, 1);
 }
 
@@ -832,10 +1453,42 @@ function collideCircle(a, b) {
   return dx * dx + dy * dy <= rr * rr;
 }
 
+function triggerArcChains(sourceEnemy, baseDamage, maxChains = 2) {
+  if (maxChains <= 0) return;
+  const candidates = state.enemies
+    .filter((enemy) => enemy !== sourceEnemy)
+    .map((enemy) => ({
+      enemy,
+      dist: Math.hypot(enemy.x - sourceEnemy.x, enemy.y - sourceEnemy.y),
+    }))
+    .filter((entry) => entry.dist < 210)
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, maxChains);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const target = candidates[i].enemy;
+    const chainDamage = baseDamage * (0.82 - i * 0.14);
+    target.hp -= chainDamage;
+    spawnArcLink(sourceEnemy.x, sourceEnemy.y, target.x, target.y, "#9ffaff");
+    emitParticles(target.x, target.y, "#8ffff7", 3, 95);
+    audio.arcZap();
+  }
+
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    if (state.enemies[i].hp <= 0) {
+      destroyEnemy(i, true);
+    }
+  }
+}
+
 function handleEnemies(dt) {
   for (let i = state.enemies.length - 1; i >= 0; i--) {
     const enemy = state.enemies[i];
     enemyBehavior(enemy, dt);
+    if (enemy.hp <= 0) {
+      destroyEnemy(i, true);
+      continue;
+    }
 
     if (!inBounds(enemy, 120)) {
       state.enemies.splice(i, 1);
@@ -845,11 +1498,21 @@ function handleEnemies(dt) {
     for (let j = state.bullets.length - 1; j >= 0; j--) {
       const b = state.bullets[j];
       if (!collideCircle(enemy, b)) continue;
-      enemy.hp -= 1;
+      const bulletDamage = b.damage || 1;
+      enemy.hp -= bulletDamage;
+      if ((b.arcChains || 0) > 0) {
+        triggerArcChains(enemy, bulletDamage * 0.9, b.arcChains);
+      }
       state.bullets.splice(j, 1);
       audio.enemyHit();
       emitParticles(b.x, b.y, "#b5f8ff", 4, 130);
       if (enemy.hp <= 0) {
+        if (state.enemies.length === 1) {
+          state.hitStopTimer = Math.max(state.hitStopTimer, 0.12);
+          state.cinematicPulse = Math.max(state.cinematicPulse, 0.95);
+          state.flash = Math.max(state.flash, 0.66);
+          emitParticles(enemy.x, enemy.y, "#f0feff", 24, 240);
+        }
         destroyEnemy(i, true);
       }
       break;
@@ -868,28 +1531,7 @@ function handleEnemies(dt) {
       continue;
     }
 
-    if (p.invulnerable <= 0) {
-      const impactDamage = 26 + enemy.contactDamage * 10;
-      const absorbed = Math.min(p.shield, impactDamage);
-      p.shield = Math.max(0, p.shield - absorbed);
-      if (absorbed > 0) {
-        p.shieldRegenDelay = p.shield > 0 ? 1.9 : 0;
-        p.shieldRegenActive = false;
-      }
-      const spill = Math.max(0, impactDamage - absorbed);
-      if (spill > 0) {
-        p.energy = Math.max(0, p.energy - spill);
-      }
-      p.invulnerable = p.energy <= 0 ? 1.8 : 1.2;
-      state.shake = Math.max(state.shake, 18);
-      state.flash = Math.max(state.flash, 0.44);
-      audio.playerDamaged();
-      emitParticles(p.x, p.y, "#ff7892", 22, 220);
-      if (p.energy <= 0) {
-        onRunFailed();
-        return;
-      }
-    }
+    if (p.invulnerable <= 0 && damagePlayer(26 + enemy.contactDamage * 10, 1.2)) return;
     destroyEnemy(i, false);
   }
 }
@@ -918,8 +1560,17 @@ function handlePowerups(dt) {
         p.shieldRegenActive = false;
       } else if (item.type === "scatter") {
         p.scatterTimer = Math.max(p.scatterTimer, 7.5);
+      } else if (item.type === "drone") {
+        p.droneTimer = Math.max(p.droneTimer, 10.5);
+      } else if (item.type === "arc") {
+        p.arcTimer = Math.max(p.arcTimer, 10.2);
+      } else if (item.type === "gravity") {
+        p.gravityWellTimer = Math.max(p.gravityWellTimer, 8.8);
       } else if (item.type === "cannon") {
         p.cannonCharges += 1;
+      } else if (item.type === "phase") {
+        p.phaseCharges = Math.min(4, p.phaseCharges + 1);
+        p.phaseCooldown = Math.max(0, p.phaseCooldown - 0.9);
       } else if (item.type === "heart") {
         p.energy = Math.min(p.maxEnergy, p.energy + 34);
       } else if (item.type === "nova") {
@@ -944,6 +1595,16 @@ function handleParticles(dt) {
     p.vy *= 0.97;
     if (p.life <= 0) {
       state.particles.splice(i, 1);
+    }
+  }
+}
+
+function handleArcLinks(dt) {
+  for (let i = state.arcLinks.length - 1; i >= 0; i--) {
+    const link = state.arcLinks[i];
+    link.life -= dt;
+    if (link.life <= 0) {
+      state.arcLinks.splice(i, 1);
     }
   }
 }
@@ -976,6 +1637,7 @@ function handleRipples(dt) {
 
 function handleSpawns(dt) {
   const cfg = levelConfig();
+  const spawnMut = state.mutator?.spawnIntervalMult || 1;
   if (state.killsInLevel >= cfg.targetKills && state.enemies.length === 0) {
     state.mode = "level-complete";
     state.levelDoneTimer = 1.2;
@@ -997,7 +1659,7 @@ function handleSpawns(dt) {
     }
     if (state.spawnTimer <= 0 && state.enemies.length < cfg.maxEnemies && !state.bossDefeated) {
       spawnEnemy();
-      state.spawnTimer = cfg.spawnInterval * 1.25;
+      state.spawnTimer = cfg.spawnInterval * 1.25 * spawnMut;
     }
     return;
   }
@@ -1005,12 +1667,15 @@ function handleSpawns(dt) {
   if (state.spawnTimer <= 0 && state.enemies.length < cfg.maxEnemies && state.killsInLevel < cfg.targetKills) {
     spawnEnemy();
     const intensity = state.killsInLevel / Math.max(1, cfg.targetKills);
-    state.spawnTimer = cfg.spawnInterval * lerp(1, 0.62, intensity);
+    state.spawnTimer = cfg.spawnInterval * lerp(1, 0.62, intensity) * spawnMut;
   }
 }
 
 function startWarpJump() {
+  hideOverlay(draftScreen);
   state.mode = "warp-jump";
+  state.enemyBullets.length = 0;
+  state.arcLinks.length = 0;
   state.warpDuration = 1.15;
   state.warpTimer = state.warpDuration;
   state.shake = Math.max(state.shake, 20);
@@ -1024,18 +1689,29 @@ function advanceLevel() {
   state.spawnTimer = 0.2;
   state.mode = "playing";
   state.warpTimer = 0;
+  state.enemyBullets.length = 0;
+  state.arcLinks.length = 0;
   state.flash = Math.max(state.flash, 0.25);
   state.bossSpawned = false;
   state.bossDefeated = false;
+  applyLevelMutator(state.levelIndex);
+  applyRelicStatsToPlayer(0);
   state.player.shield = state.player.maxShield;
   state.player.shieldRegenDelay = 0;
   state.player.shieldRegenActive = false;
+  state.player.phaseCharges = Math.min(4, state.player.phaseCharges + 1);
+  state.player.phaseCooldown = Math.max(0, state.player.phaseCooldown - 0.8);
+  if (state.relicStats.cannonPerLevel > 0) {
+    state.player.cannonCharges += state.relicStats.cannonPerLevel;
+  }
   emitParticles(state.player.x, state.player.y, "#95fff5", 22, 220);
 }
 
 function onRunFailed() {
   state.mode = "game-over";
+  state.arcLinks.length = 0;
   audio.gameOver();
+  hideOverlay(draftScreen);
   state.endedLevel = state.levelIndex + 1;
   if (state.endedLevel > highscoreLevelSelect.options.length) {
     populateHighscoreLevelOptions(state.endedLevel + 5);
@@ -1059,19 +1735,23 @@ function onRunFailed() {
 function update(dt) {
   state.time += dt;
   state.streakTimer -= dt;
+  state.overdriveTimer = Math.max(0, state.overdriveTimer - dt);
   if (state.streakTimer <= 0) {
     state.streak = 0;
   }
   state.shake = Math.max(0, state.shake - dt * 26);
+  state.cinematicPulse = Math.max(0, state.cinematicPulse - dt * 0.9);
   state.flash = Math.max(0, state.flash - dt * 0.9);
   state.powerupMessageTimer = Math.max(0, state.powerupMessageTimer - dt);
   state.cameraOffsetX = rand(-state.shake, state.shake) * 0.5;
   state.cameraOffsetY = rand(-state.shake, state.shake) * 0.5;
   handleRipples(dt);
+  handleArcLinks(dt);
 
   if (state.mode === "playing") {
     handlePlayer(dt);
     handleBullets(dt);
+    handleEnemyBullets(dt);
     handleEnemies(dt);
     handlePowerups(dt);
     handleParticles(dt);
@@ -1079,10 +1759,11 @@ function update(dt) {
   } else if (state.mode === "level-complete") {
     handlePlayer(dt * 0.5);
     handleBullets(dt * 0.4);
+    handleEnemyBullets(dt * 0.35);
     handleParticles(dt);
     state.levelDoneTimer -= dt;
     if (state.levelDoneTimer <= 0) {
-      startWarpJump();
+      openDraftScreen();
     }
   } else if (state.mode === "warp-jump") {
     const p = state.player;
@@ -1507,6 +2188,32 @@ function drawPlayer() {
       ctx.restore();
     }
   }
+
+  if (p.arcTimer > 0) {
+    const t = clamp(p.arcTimer / 10.2, 0, 1);
+    ctx.strokeStyle = `rgba(172, 232, 255, ${0.45 + t * 0.35})`;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 29 + Math.sin(state.time * 8) * 2.4, 23 + Math.cos(state.time * 6) * 2.2, state.time * 0.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 34 + Math.cos(state.time * 7) * 2.2, 27 + Math.sin(state.time * 5) * 2, -state.time * 0.7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (p.gravityWellTimer > 0) {
+    const g = clamp(p.gravityWellTimer / 8.8, 0, 1);
+    ctx.strokeStyle = `rgba(176, 142, 255, ${0.32 + g * 0.4})`;
+    ctx.lineWidth = 2.4;
+    for (let ring = 0; ring < 3; ring++) {
+      const w = 38 + ring * 10 + Math.sin(state.time * (2.2 + ring * 0.4) + ring) * 2.8;
+      const h = 26 + ring * 7 + Math.cos(state.time * (2.8 + ring * 0.3) + ring * 2) * 2.2;
+      const rot = state.time * (0.45 + ring * 0.2) * (ring % 2 === 0 ? 1 : -1);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w, h, rot, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
@@ -1519,6 +2226,41 @@ function drawBullet(b) {
   ctx.beginPath();
   ctx.arc(b.x, py, b.radius * scale, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawEnemyBullet(bullet) {
+  const scale = depthScale(bullet.y);
+  const py = projectY(bullet.y);
+  ctx.shadowBlur = 18;
+  ctx.shadowColor = bullet.color;
+  ctx.fillStyle = bullet.color;
+  ctx.beginPath();
+  ctx.arc(bullet.x, py, bullet.radius * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 235, 245, 0.55)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(bullet.x, py, bullet.radius * 0.58 * scale, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawArcLinks() {
+  for (const link of state.arcLinks) {
+    const alpha = clamp(link.life / link.maxLife, 0, 1);
+    const wobble = Math.sin((1 - alpha) * 26 + state.time * 32) * 6;
+    const midX = (link.x1 + link.x2) * 0.5 + wobble;
+    const midY = (link.y1 + link.y2) * 0.5 - wobble * 0.45;
+    ctx.shadowBlur = 22;
+    ctx.shadowColor = link.color;
+    ctx.strokeStyle = `${link.color}${Math.round(alpha * 255)
+      .toString(16)
+      .padStart(2, "0")}`;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(link.x1, projectY(link.y1));
+    ctx.quadraticCurveTo(midX, projectY(midY), link.x2, projectY(link.y2));
+    ctx.stroke();
+  }
 }
 
 function drawEnemy(enemy) {
@@ -1578,6 +2320,18 @@ function drawEnemy(enemy) {
     ctx.stroke();
   }
 
+  if (enemy.elite) {
+    ctx.strokeStyle = enemy.eliteMod === "hasted"
+      ? "rgba(130, 255, 231, 0.92)"
+      : enemy.eliteMod === "armored"
+      ? "rgba(255, 220, 150, 0.92)"
+      : "rgba(255, 145, 176, 0.92)";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, enemy.radius + 5 + Math.sin(state.time * 7 + enemy.id) * 1.2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -1588,8 +2342,16 @@ function drawPowerup(item) {
     ? "#89ffd2"
     : item.type === "scatter"
     ? "#6fc4ff"
+    : item.type === "drone"
+    ? "#98ffde"
+    : item.type === "arc"
+    ? "#a9ceff"
+    : item.type === "gravity"
+    ? "#b295ff"
     : item.type === "cannon"
     ? "#ff9a63"
+    : item.type === "phase"
+    ? "#8effde"
     : item.type === "heart"
     ? "#ff6f8e"
     : "#c48dff";
@@ -1702,6 +2464,58 @@ function drawWarpJumpEffect() {
   ctx.restore();
 }
 
+function drawPostFxPass() {
+  const pulse = state.cinematicPulse;
+  const p = state.player;
+  const gravityActive = p && p.gravityWellTimer > 0;
+  const arcActive = p && p.arcTimer > 0;
+  if (pulse <= 0.001 && state.overdriveTimer <= 0 && !gravityActive && !arcActive) return;
+
+  // Soft vignette to add depth and focus.
+  const vignette = ctx.createRadialGradient(
+    canvas.width * 0.5,
+    canvas.height * 0.5,
+    canvas.height * 0.15,
+    canvas.width * 0.5,
+    canvas.height * 0.5,
+    canvas.width * 0.68
+  );
+  vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+  vignette.addColorStop(1, `rgba(0, 9, 18, ${0.24 + pulse * 0.28})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Overdrive color grading and streak bands.
+  if (state.overdriveTimer > 0) {
+    const odAlpha = clamp(state.overdriveTimer / 8.5, 0, 1);
+    ctx.fillStyle = `rgba(255, 214, 132, ${0.06 + odAlpha * 0.08})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < 8; i++) {
+      const y = (i / 8) * canvas.height + Math.sin(state.time * 4 + i) * 8;
+      ctx.fillStyle = `rgba(255, 242, 174, ${0.02 + odAlpha * 0.03})`;
+      ctx.fillRect(0, y, canvas.width, 3);
+    }
+  }
+
+  if (gravityActive) {
+    const g = clamp(p.gravityWellTimer / 8.8, 0, 1);
+    const centerX = p.x;
+    const centerY = projectY(p.y);
+    const grav = ctx.createRadialGradient(centerX, centerY, 12, centerX, centerY, canvas.width * 0.45);
+    grav.addColorStop(0, `rgba(215, 186, 255, ${0.14 + g * 0.1})`);
+    grav.addColorStop(0.5, `rgba(108, 80, 164, ${0.07 + g * 0.06})`);
+    grav.addColorStop(1, "rgba(42, 30, 80, 0)");
+    ctx.fillStyle = grav;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  if (arcActive) {
+    const a = clamp(p.arcTimer / 10.2, 0, 1);
+    ctx.fillStyle = `rgba(170, 230, 255, ${0.03 + a * 0.04})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
 function render(frameDt = FIXED_DT) {
   if (background3d.ready) {
     background3d.update(frameDt, state.levelIndex, state.ripples.length);
@@ -1720,6 +2534,8 @@ function render(frameDt = FIXED_DT) {
   for (const enemy of enemiesByDepth) drawEnemy(enemy);
   for (const item of powerupsByDepth) drawPowerup(item);
   for (const b of state.bullets) drawBullet(b);
+  for (const bullet of state.enemyBullets) drawEnemyBullet(bullet);
+  drawArcLinks();
   drawParticles();
 
   ctx.globalCompositeOperation = "source-over";
@@ -1729,6 +2545,7 @@ function render(frameDt = FIXED_DT) {
 
   drawLevelBanner();
   drawWarpJumpEffect();
+  drawPostFxPass();
 
   if (state.flash > 0) {
     ctx.fillStyle = `rgba(255, 255, 255, ${state.flash * 0.23})`;
@@ -1753,6 +2570,14 @@ function gameLoop(ts) {
   const dt = Math.min(0.05, (ts - lastTime) / 1000);
   lastTime = ts;
 
+  if (state.hitStopTimer > 0) {
+    state.hitStopTimer = Math.max(0, state.hitStopTimer - dt);
+    state.cinematicPulse = Math.max(state.cinematicPulse, 0.72);
+    render(dt);
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   if (state.mode !== "menu" && state.mode !== "paused") {
     accumulator += dt;
     let steps = 0;
@@ -1768,7 +2593,7 @@ function gameLoop(ts) {
 }
 
 function togglePause() {
-  if (state.mode === "playing" || state.mode === "level-complete" || state.mode === "warp-jump") {
+  if (state.mode === "playing" || state.mode === "level-complete" || state.mode === "warp-jump" || state.mode === "draft") {
     state.pauseReturnMode = state.mode;
     state.mode = "paused";
     showOverlay(pauseScreen);
@@ -1809,6 +2634,7 @@ function renderGameToText() {
     level: {
       index: state.levelIndex + 1,
       name: levelConfig().name,
+      mutator: state.mutator?.name || "Stable Sector",
       kills: state.killsInLevel,
       target_kills: levelConfig().targetKills,
       warp_timer: Number(Math.max(0, state.warpTimer || 0).toFixed(2)),
@@ -1825,6 +2651,12 @@ function renderGameToText() {
       scatter_timer: Number(Math.max(0, p.scatterTimer || 0).toFixed(2)),
       shield_timer: Number(Math.max(0, p.shieldTimer || 0).toFixed(2)),
       cannon_charges: p.cannonCharges || 0,
+      phase_charges: p.phaseCharges || 0,
+      phase_cooldown: Number(Math.max(0, p.phaseCooldown || 0).toFixed(2)),
+      arc_timer: Number(Math.max(0, p.arcTimer || 0).toFixed(2)),
+      gravity_well_timer: Number(Math.max(0, p.gravityWellTimer || 0).toFixed(2)),
+      overdrive_timer: Number(Math.max(0, state.overdriveTimer || 0).toFixed(2)),
+      overdrive_meter: Number(Math.max(0, state.overdriveMeter || 0).toFixed(2)),
       invulnerable: Number(Math.max(0, p.invulnerable || 0).toFixed(2)),
     },
     enemies: state.enemies.slice(0, 20).map((enemy) => ({
@@ -1841,6 +2673,13 @@ function renderGameToText() {
       vx: Number(bullet.vx.toFixed(2)),
       vy: Number(bullet.vy.toFixed(2)),
     })),
+    enemy_bullets: state.enemyBullets.slice(0, 20).map((bullet) => ({
+      x: Number(bullet.x.toFixed(2)),
+      y: Number(bullet.y.toFixed(2)),
+      vx: Number(bullet.vx.toFixed(2)),
+      vy: Number(bullet.vy.toFixed(2)),
+      damage: bullet.damage,
+    })),
     powerups: state.powerups.map((powerup) => ({
       type: powerup.type,
       x: Number(powerup.x.toFixed(2)),
@@ -1853,8 +2692,17 @@ function renderGameToText() {
       radius: Number(ripple.radius.toFixed(2)),
       life: Number(ripple.life.toFixed(2)),
     })),
+    arc_links: state.arcLinks.slice(0, 12).map((link) => ({
+      x1: Number(link.x1.toFixed(2)),
+      y1: Number(link.y1.toFixed(2)),
+      x2: Number(link.x2.toFixed(2)),
+      y2: Number(link.y2.toFixed(2)),
+      life: Number(link.life.toFixed(2)),
+    })),
     score: Math.floor(state.score),
     streak: state.streak,
+    relics: Object.entries(state.relicStacks).map(([id, stacks]) => ({ id, stacks })),
+    draft_choices: [...state.draftChoices],
     audio_muted: audio.muted,
   };
   return JSON.stringify(payload, null, 2);
@@ -1863,6 +2711,11 @@ function renderGameToText() {
 window.render_game_to_text = renderGameToText;
 window.advanceTime = (ms = 16.67) => {
   if (state.mode === "menu" || state.mode === "paused") {
+    render(ms / 1000);
+    return Promise.resolve();
+  }
+  if (state.hitStopTimer > 0) {
+    state.hitStopTimer = Math.max(0, state.hitStopTimer - ms / 1000);
     render(ms / 1000);
     return Promise.resolve();
   }
@@ -1877,8 +2730,16 @@ window.advanceTime = (ms = 16.67) => {
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("keydown", (event) => {
   ensureInputAudio();
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "KeyQ", "KeyR"].includes(event.code)) {
     event.preventDefault();
+  }
+  if (state.mode === "draft" && ["Digit1", "Digit2", "Digit3"].includes(event.code)) {
+    const idx = Number.parseInt(event.code.replace("Digit", ""), 10) - 1;
+    const relicId = state.draftChoices[idx];
+    if (relicId) {
+      applyDraftRelic(relicId);
+    }
+    return;
   }
   input.keys.add(event.code);
 
@@ -1890,6 +2751,12 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "KeyE") {
     input.cannonQueued = true;
+  }
+  if (event.code === "KeyQ") {
+    input.phaseQueued = true;
+  }
+  if (event.code === "KeyR") {
+    input.overdriveQueued = true;
   }
   if (event.code === "KeyF") {
     toggleFullscreen();
@@ -1925,7 +2792,10 @@ window.addEventListener("mouseup", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && (state.mode === "playing" || state.mode === "level-complete" || state.mode === "warp-jump")) {
+  if (
+    document.hidden &&
+    (state.mode === "playing" || state.mode === "level-complete" || state.mode === "warp-jump" || state.mode === "draft")
+  ) {
     state.pauseReturnMode = state.mode;
     state.mode = "paused";
     showOverlay(pauseScreen);
@@ -1948,6 +2818,17 @@ restartBtn.addEventListener("click", async () => {
   ensureInputAudio();
   await submitScoreEntry();
   resetRun();
+});
+
+draftChoiceGrid.addEventListener("click", (event) => {
+  if (state.mode !== "draft") return;
+  const target = event.target as HTMLElement;
+  const choice = target.closest(".draft-choice") as HTMLElement | null;
+  if (!choice) return;
+  const relicId = choice.dataset.relicId;
+  if (!relicId) return;
+  ensureInputAudio();
+  applyDraftRelic(relicId);
 });
 
 highscoreLevelSelect.addEventListener("change", () => {
